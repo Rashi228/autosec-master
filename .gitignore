@@ -1,0 +1,41 @@
+# Security: Environment Variables
+.env
+
+# Python: Virtual Environments
+venv/
+env/
+.venv/
+ENV/
+
+# Python: Compiled & Cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# AI Data & Memory
+experience_memory.json
+soc_runtime_state.json
+*.log
+
+# Node.js: Dashboard
+node_modules/
+dist/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.eslintcache
+
+# OS-Specific
+.DS_Store
+Thumbs.db
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo

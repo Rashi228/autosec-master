@@ -1,0 +1,22 @@
+# AutoSec OpenEnv — Python Dependencies
+# =========================================
+# Install: pip install -r requirements.txt
+# Python: 3.10+
+
+# Core framework
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+
+# Data validation (OpenEnv schemas)
+pydantic==2.10.6
+
+# Inference pipeline
+openai==1.59.9
+requests==2.32.3
+python-dotenv==1.0.1
+
+# AI and Reinforcement Learning
+numpy>=1.24.0
+gymnasium>=0.29.0
+stable-baselines3>=2.2.0
+
