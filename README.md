@@ -1,97 +1,77 @@
-# 🛡️ AutoSec Defender: Autonomous SOC Defense Engine
+# 🛡️ AutoSec RL Agent: Self-Improving Autonomous SOC
 
-AutoSec is a cutting-edge, autonomous Security Operations Center (SOC) designed to protect enterprise infrastructure from adaptive human and AI adversaries. It leverages a hierarchical decision-making framework combining **Deterministic Rules**, **Few-Shot Experience Memory**, and **LLM-based Tactical Reasoning**.
+AutoSec RL is a next-generation, **self-teaching cybersecurity defense agent** powered by Reinforcement Learning (PPO). It transforms traditional rule-based SOC automation into a proactive, adaptive defensive brain that learns from experience and evaluates its own actions through multi-persona reasoning.
 
 ---
 
 ## 🚀 Key Features
 
-### 🧠 The Defender Brain (Hybrid Tactical Engine)
-The SOC doesn't just guess; it follows a high-performance decision tree:
-1.  **Layer 1: Rule Engine**: Resolves "no-brainer" cases (e.g., immediate blocking of critical malicious IPs) to bypass latency.
-2.  **Layer 2: Experience Memory**: Retrieval of past successful containment actions using a session-aware history filter (to prevent redundancy).
-3.  **Layer 3: LLM Intelligence**: Powered by **Llama-3.3 (Groq)**, this layer handles complex lateral movement and multi-stage threats using asset-aware prioritization (e.g., protecting DC and Database servers first).
+### 🧠 RL-Powered Defensive Brain
+- **Gymnasium Core**: Wraps the security simulation into a standard RL environment for modular training.
+- **PPO Strategy**: Uses Proximal Policy Optimization to discover optimal containment strategies for complex multi-stage attacks.
+- **Curriculum Learning**: Automatically scales environment difficulty (noise, attacker speed) based on the agent's real-time success rate.
 
-### 📦 Adversarial Simulation Environment
-*   **Multi-Stage Attacker**: Simulates a realistic kill chain:
-    *   **Reconnaissance**: Port scanning and service discovery.
-    *   **Brute Force**: Authentication attacks on edge laptops and dev PCs.
-    *   **Lateral Movement**: Targeted pivoting from compromised endpoints to high-value internal nodes.
-*   **High-Fidelity Log Generator**: Produces realistic JSON security logs mapped to industry-standard severity levels.
+### 💾 Semantic Experience Memory (Vector DB)
+- **ChromaDB Integration**: Replaces static history with a high-performance vector store.
+- **Embedding-Based Retrieval**: Uses `sentence-transformers` for semantic similarity searches, allowing the agent to correlate current snapshots with successful past mitigations.
 
-### 📊 Live Monitoring Dashboard
-*   **Real-Time Telemetry**: Visualization of `active_threats`, `compromise_levels`, and `isolated_hosts`.
-*   **Session Tracking**: A running history of all defensive moves with a cumulative scoring engine.
+### 🎭 Multi-Persona Explainability
+- Actions are independently evaluated by three distinct SOC personas:
+  1. **SOC Analyst**: Focuses on triage speed and active threat resolution.
+  2. **Threat Hunter**: Evaluates log correlation and precision.
+  3. **Incident Responder**: Focuses on containment correctness and blast-radius reduction.
+
+### 📉 Adaptive Adversarial Attacker
+- A learner-aware attacker that tracks agent failure points and dynamically shifts its attack vectors (Recon -> Brute Force -> Lateral Movement) to exploit vulnerabilities.
 
 ---
 
 ## 🛠️ Technology Stack
-*   **Core Logic**: Python 3.12+
-*   **Web Framework**: FastAPI (Uvicorn)
-*   **AI Integration**: OpenAI SDK (Groq-compatible)
-*   **Frontend**: React (Vite)
-*   **Environment**: Gymnasium-compatible RL wrapper
-*   **Database/Memory**: JSON-based persistent experience memory
+- **RL Framework**: Gymnasium, Stable-Baselines3
+- **Intelligence**: PyTorch (PPO), ChromaDB (Vector DB)
+- **Backend**: FastAPI (Python 3.12+)
+- **Frontend**: React + Vite (Telemetry Dashboard)
+- **Personas**: Rule-based & LLM-augmented explainability Traces
 
 ---
 
-## ⚙️ Project Architecture
+## ⚙️ Running the System
 
-### 🛡️ Defensive Workflow
-1.  **Ingestion**: Security logs pull in via the `/v1/state` or `real_world_bridge.py`.
-2.  **Mapping**: Logs are mapped to kill chain stages (`detect_stage`).
-3.  **Decision**: 
-    *   **Redundancy Check**: Current session history is checked for existing blocks/isolations.
-    *   **Heuristic Selection**: Actions targeting internal assets (DC, DB) get a **+10.0 score boost**.
-4.  **Action**: The best action is executed via the environment's `step` function.
-
----
-
-## 🔌 API Endpoints (v1)
-
-| Endpoint | Method | Description |
-| :--- | :--- | :--- |
-| `/v1/reset` | `POST` | Resets the simulation to a clean state for a specific task. |
-| `/v1/step` | `POST` | Executes a defender action (Block IP, Isolate Host, etc.) and returns the reward. |
-| `/v1/state` | `GET` | Returns the current environmental state, including `system_state` and `logs`. |
-| `/v1/result` | `GET` | Returns the final episode grade and summary. |
-
----
-
-## 🎌 Installation & Setup
-
-### 1. Requirements
-Ensure you have Python 3.12 installed.
+### 1. Pre-requisites
 ```powershell
 python -m venv venv
 .\venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
-### 2. Configuration
-Create a `.env` file in the root directory:
-```bash
-API_BASE_URL=https://api.groq.com/openai/v1
-MODEL_NAME=llama-3.3-70b-versatile
-OPENAI_API_KEY=your_groq_key_here
-MAX_STEPS=20
+### 2. Autonomous RL Server
+Start the RL-integrated backend to handle autonomous defender steps:
+```powershell
+$env:PYTHONPATH="."
+.\venv\Scripts\python.exe backend\api\server_rl.py
 ```
 
-### 3. Running the Simulation
-**Terminal 1 (The API Server):**
+### 3. Dashboard UI
+Launch the telemetry dashboard to visualize the agent's reasoning traces:
 ```powershell
-.\venv\Scripts\python.exe -m uvicorn api.server:app --host 0.0.0.0 --port 7860
-```
-
-**Terminal 2 (The War Room):**
-```powershell
-.\venv\Scripts\python.exe war_room.py --task task_02
+cd dashboard
+npm install
+npm run dev
 ```
 
 ---
 
-## 📝 Recent Fixes (Stability Patch)
-*   **CORS Fix**: Added CORSMiddleware to allow cross-origin requests from the React dashboard.
-*   **JSON Extraction**: Implemented robust regex-based JSON parsing in `inference.py` to handle LLM conversational filler.
-*   **History Synchronization**: Applied string-safe action history tracking to resolve the redundancy loop issue.
-*   **Scoring Sync**: Restored `cumulative_score` tracking in the environment core.
+## 📝 Training the Agent
+To run a fresh reinforcement learning training cycle:
+```powershell
+$env:PYTHONPATH="."
+.\venv\Scripts\python.exe backend\rl\train_rl.py
+```
+Training logs and model checkpoints are stored in `./logs/rl_training/`.
+
+---
+
+## ✅ Recent RL Upgrades
+- **Pydantic Enum Alignment**: Synchronized the environment's internal strings with API schemas to resolve dashboard stalls.
+- **Autonomous Step Polling**: Integrated the dashboard with the `/v1/step` autonomous endpoint.
+- **Hierarchical Actions**: Refactored the action space to support [Strategy, Tactic, Target] decision layers.
