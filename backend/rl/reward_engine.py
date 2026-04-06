@@ -9,42 +9,46 @@ from autosec_openenv.models import Action, ActionType, SystemState
 
 def calculate_reward(action: Action, state: SystemState, step_info: dict) -> float:
     """
-    Reward logic for Reinforcement Learning training:
-    - +10 correct threat detection (Not modeled yet)
-    - +15 correct containment action
-    - +5 correct investigation step
-    - -10 missed threat
-    - -5 false positive
-    - -2 redundant action
-    - -20 unsafe action
+    Normalized and stable reward function.
+    Scale: Approx [-5.0, +10.0] per step.
     """
     score = 0.0
-    
     a_type = action.action_type
     
-    # Check redundant action
+    # 1. Constant Threat Burden (Pressure to act)
+    # -0.5 per active threat. Max penalty -1.5 (if 3 threats)
+    score -= (state.active_threats * 0.5)
+    
+    # 2. Action Evaluation
+    if step_info.get("is_repeated", False):
+        # Penalize repeating the same action if it didn't work last time
+        score -= 1.0
+        
     if step_info.get("redundant", False):
-        score -= 2.0
-    # Unsafe action
+        score -= 0.5
     elif step_info.get("unsafe", False):
-        score -= 20.0
+        score -= 5.0
     else:
-        # Correct containment action
+        # Correct Targeting Reward (Discovery hint)
         if a_type in [ActionType.BLOCK_IP, ActionType.ISOLATE_HOST]:
-            if step_info.get("resolved_threat", False):
-                score += 15.0
+            if step_info.get("is_correct_target", False):
+                score += 2.0  # Hint: "You are looking at the right place"
+                
+                if step_info.get("resolved_threat", False):
+                    score += 5.0  # Main reward: "You fixed it!"
             else:
-                score -= 5.0 # False positive
-
+                score -= 1.0  # Penalty for wrong target
+                
         # Correct investigation (monitor)
         elif a_type == ActionType.MONITOR:
             if state.active_threats > 0:
-                score += 5.0 # Good investigation
+                score += 0.5  # Small reward for watching active threats
             else:
-                score -= 2.0 # Unnecessary
-                
-    # Missed threat if no productive action occurs when threats exist
-    if a_type == ActionType.NO_ACTION and state.active_threats > 0:
-        score -= 10.0
+                score -= 0.5
 
-    return score
+    # 3. Intermediate Progress
+    if step_info.get("threat_reduced", False):
+        score += 1.0
+
+    # Ensure result is within a stable float range for PPO
+    return float(score)
