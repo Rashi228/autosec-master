@@ -49,6 +49,7 @@ class SimulationEnvironment:
         self.action_history: List[Dict[str, Any]] = []
         self.last_attacker_action: Optional[Dict[str, Any]] = None
         self.cumulative_score = 0.0
+        self.threat_capacity = 3 # Dynamic limit for curriculum learning
 
         # Network Topology (Simulated)
         self.hosts = ["web-prod-01", "db-server-01", "dc-01", "hr-laptop-12", "dev-pc-04"]
@@ -136,7 +137,7 @@ class SimulationEnvironment:
     def _execute_attacker_turn(self):
         """Simulates an adversarial move."""
         # Simple heuristic attacker
-        if self.state.active_threats < 3:
+        if self.state.active_threats < self.threat_capacity:
             target_host = random.choice(self.hosts)
             if target_host not in self.state.isolated_hosts:
                 attack_type = "LATERAL_MOVEMENT" if self.step_id > 2 else "BRUTE_FORCE"

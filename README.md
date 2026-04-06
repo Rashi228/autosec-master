@@ -59,6 +59,13 @@ npm install
 npm run dev
 ```
 
+### 4. Headless War Room (CLI)
+If you prefer a high-fidelity console-based "War Room" experience using the RL brain:
+```powershell
+$env:PYTHONPATH="."
+.\venv\Scripts\python.exe backend\rl\war_room_rl.py
+```
+
 ---
 
 ## 📝 Training the Agent
