@@ -1,0 +1,45 @@
+
+************************************************************
+      AUTOSEC OPENENV - LIVE WAR ROOM
+      Defender (Blue) vs. Adaptive Attacker (Red)
+************************************************************
+
+[*] Initializing War Room for task_02...
+
+============================================================
+ ROUND 1
+============================================================
+
+  [RED TEAM] Initializing reconnaissance...
+
+  [LOG STREAM]   Stage: BENIGN
+   [LOW]      BENIGN_ACTIVITY                src=10.0.0.12
+   [LOW]      BENIGN_ACTIVITY                src=10.0.1.20
+   [LOW]      BENIGN_ACTIVITY                src=10.0.0.11
+
+  [BLUE TEAM ANALYZING...]
+     [RULE ENGINE] Suppressing action. Stage: BENIGN. Rule Logic: All activity in current window is BENIGN and Active Threats = 0. Suppression active.
+     [LLM REASONING]
+   Action: NO_ACTION            | Target: none
+   Reasoning: Rule Logic: All activity in current window is BENIGN and Active Threats = 0. Suppression active.
+Traceback (most recent call last):
+  File "D:\Meta\autosec_openenv\memory.py", line 70, in save_experience
+    print(f"   \U0001f4be Memory saved: {len(self.memory)} experiences in {abs_path}")
+  File "C:\Python312\Lib\encodings\cp1252.py", line 19, in encode
+    return codecs.charmap_encode(input,self.errors,encoding_table)[0]
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+UnicodeEncodeError: 'charmap' codec can't encode character '\U0001f4be' in position 3: character maps to <undefined>
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "D:\Meta\war_room.py", line 156, in <module>
+    run_war_room(args.task)
+  File "D:\Meta\war_room.py", line 129, in run_war_room
+    memory.save_experience(exp)
+  File "D:\Meta\autosec_openenv\memory.py", line 72, in save_experience
+    print(f"   \u274c ERROR saving memory: {e}")
+  File "C:\Python312\Lib\encodings\cp1252.py", line 19, in encode
+    return codecs.charmap_encode(input,self.errors,encoding_table)[0]
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+UnicodeEncodeError: 'charmap' codec can't encode character '\u274c' in position 3: character maps to <undefined>

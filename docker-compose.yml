@@ -1,0 +1,44 @@
+version: "3.9"
+
+services:
+  autosec-env:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: autosec-openenv:latest
+    container_name: autosec_openenv
+    ports:
+      - "7860:7860"
+    environment:
+      - ENV_BASE_URL=http://localhost:7860
+    volumes:
+      # Mount source for live reload during development
+      - ./autosec_openenv:/app/autosec_openenv:ro
+      - ./api:/app/api:ro
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:7860/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  # Optional: run inference against the containerized environment
+  inference:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: autosec-openenv:latest
+    container_name: autosec_inference
+    depends_on:
+      autosec-env:
+        condition: service_healthy
+    environment:
+      - ENV_BASE_URL=http://autosec-env:7860
+      - API_BASE_URL=${API_BASE_URL:-https://api.openai.com/v1}
+      - MODEL_NAME=${MODEL_NAME:-gpt-4o-mini}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - HF_TOKEN=${HF_TOKEN:-}
+    command: ["python", "inference.py"]
+    profiles:
+      - inference   # Only runs when: docker compose --profile inference up
