@@ -56,6 +56,10 @@ def get_memory():
 async def root():
     return {"message": "AutoSec Adaptive RL API is active."}
 
+@app.get("/health")
+async def health():
+    return {"status": "ok", "timestamp": time.time()}
+
 @app.post("/v1/reset")
 async def reset(payload: Dict[str, Any] = Body(default={})):
     global _env_wrapper, _current_obs, _episode_elapsed_start
