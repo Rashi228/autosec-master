@@ -19,4 +19,6 @@ python-dotenv==1.0.1
 numpy>=1.24.0
 gymnasium>=0.29.0
 stable-baselines3>=2.2.0
+chromadb>=0.4.0
+sentence-transformers>=2.2.2
 

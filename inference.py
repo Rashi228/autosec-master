@@ -1,271 +1,471 @@
 """
-inference.py — The Primary Defender Brain (LLM Logic)
-=====================================================
-Calculates the best defensive response using OpenAI/Gemini models.
-Includes heuristic filters to ensure high-quality actions.
+inference.py — Hybrid Defender Brain: Smart Policy + Selective LLM
+===================================================================
+Architecture:
+  - Steps 1, 3, 5... → Smart Deterministic Policy (always runs, never fails)
+  - Steps 2, 4, 6... → LLM Enhancement (called every LLM_CALL_INTERVAL steps)
+  - LLM failure      → Seamless fallback to deterministic policy, logged
+  - All episodes complete reliably, independent of API credit status
+
+Usage:
+    python inference.py                   # task_hard (default)
+    python inference.py task_easy
+    python inference.py task_medium
 """
 
 import os
 import sys
 import json
 import time
+import random
 import requests
-from typing import List, Dict, Any, Optional
+import logging
+from typing import List, Optional, Tuple
 from datetime import datetime
 
 from openai import OpenAI
-from pydantic import BaseModel
 from dotenv import load_dotenv
 
 from autosec_openenv.models import (
-    SystemState, Observation, Action, ActionType, 
-    SecurityLog, Severity, EventType, SystemStatus,
-    EpisodeResult, AttackAction
+    Observation, Action, ActionType,
+    SecurityLog, Severity, EventType
 )
-from autosec_openenv.log_generator import generate_malicious_log, generate_benign_logs
 from autosec_openenv.memory import ExperienceMemory, Experience
 from autosec_openenv.kill_chain import detect_stage
 
-# Load environment variables
+# ─────────────────────────────────────────────────────────────────────────────
+# CONFIGURATION
+# ─────────────────────────────────────────────────────────────────────────────
 load_dotenv()
 
-# Configuration
-ENV_BASE_URL = os.getenv("ENV_BASE_URL", "http://localhost:7860")
-MODEL_NAME = os.getenv("MODEL_NAME", "gpt-4-turbo")
-API_BASE_URL = os.getenv("API_BASE_URL", "https://api.openai.com/v1")
-client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"), base_url=API_BASE_URL)
+ENV_BASE_URL       = os.getenv("ENV_BASE_URL",       "http://localhost:7860")
+MODEL_NAME         = os.getenv("MODEL_NAME",         "meta-llama/Llama-3.1-8B-Instruct")
+API_BASE_URL       = os.getenv("API_BASE_URL",       "https://router.huggingface.co/v1")
+MAX_STEPS          = int(os.getenv("MAX_STEPS",      "15"))
+MAX_TOKENS         = int(os.getenv("MAX_TOKENS",     "256"))
+TEMPERATURE        = float(os.getenv("TEMPERATURE",  "0.0"))
+LLM_CALL_INTERVAL  = int(os.getenv("LLM_INTERVAL",    "3"))   # LLM called every N steps
+RANDOM_SEED        = int(os.getenv("RANDOM_SEED",     "42"))
+ALLOW_FALLBACK     = os.getenv("ALLOW_FALLBACK",      "true").lower() == "true"  # False = strict eval
+TOP_P              = float(os.getenv("TOP_P",          "1.0"))
 
-# Shared memory module
+# Fix global seed for reproducibility
+random.seed(RANDOM_SEED)
+
+client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"), base_url=API_BASE_URL)
 memory = ExperienceMemory()
 
-# --- LLM SYSTEM PROMPT ---
-SYSTEM_PROMPT = """
-You are the Lead Autonomous Security Engineer (AutoSec SOC). 
-Your goal is to protect a enterprise network from a persistent human or AI attacker.
+# ─────────────────────────────────────────────────────────────────────────────
+# LOGGING
+# ─────────────────────────────────────────────────────────────────────────────
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s | %(levelname)s | %(message)s",
+    datefmt="%H:%M:%S"
+)
+logger = logging.getLogger("autosec")
 
-CORE MISSION:
-1. CONTAIN: Isolate compromised hosts or block malicious IPs immediately.
-2. DISRUPT: Terminate malicious processes or reset compromised credentials.
-3. RECOVER: Restore system state once threats are contained.
+# ─────────────────────────────────────────────────────────────────────────────
+# SEVERITY PRIORITY MAP (for threat prioritization)
+# ─────────────────────────────────────────────────────────────────────────────
+SEVERITY_SCORE = {
+    "CRITICAL": 4,
+    "HIGH":     3,
+    "MEDIUM":   2,
+    "LOW":      1,
+    "INFO":     0,
+}
 
-HIERARCHY OF ACTIONS:
-- If Active threats > 0, it is a FAILURE to choose NO_ACTION or MONITOR.
-- Always check ACTION HISTORY to avoid redundant isolations or blocks.
-- Internal infrastructure (dc, db, server) is high-priority for protection.
+CRITICAL_HOSTS = {"dc-01", "db-server-01", "web-prod-01"}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# SMART DETERMINISTIC POLICY
+# ─────────────────────────────────────────────────────────────────────────────
+def _smart_policy(obs: Observation, history: List[Tuple[str, str]]) -> Action:
+    """
+    Priority-based deterministic policy. Always produces a valid, non-redundant action.
+
+    Priority order:
+    1. Block highest-severity external attacker IPs not yet blocked
+    2. Isolate critical infrastructure hosts under attack
+    3. Isolate any compromised host not yet isolated
+    4. Terminate processes on compromised non-isolated hosts
+    5. Monitor (if no threats)
+    """
+    history_set = set(history)
+
+    sys_state = (
+        obs.system_state
+        if isinstance(obs.system_state, dict)
+        else obs.system_state.model_dump()
+    )
+    already_blocked  = set(sys_state.get("blocked_ips",    []) or [])
+    already_isolated = set(sys_state.get("isolated_hosts", []) or [])
+    malicious_logs   = [l for l in obs.logs if l.is_malicious]
+
+    if not malicious_logs or obs.num_active_threats == 0:
+        return Action(
+            action_type=ActionType.MONITOR,
+            target="none",
+            reasoning="Smart Policy: No active threats detected."
+        )
+
+    # Sort malicious logs by severity descending
+    malicious_logs = sorted(
+        malicious_logs,
+        key=lambda l: SEVERITY_SCORE.get(str(l.severity).upper().split(".")[-1], 0),
+        reverse=True
+    )
+
+    # 1. Block external attacker IPs (highest severity first)
+    for log in malicious_logs:
+        ip = log.source_ip
+        if (ip and ip not in already_blocked
+                and ("BLOCK_IP", ip) not in history_set):
+            return Action(
+                action_type=ActionType.BLOCK_IP,
+                target=ip,
+                reasoning=f"Smart Policy: Block attacker IP {ip} [{log.severity}]."
+            )
+
+    # 2. Isolate critical hosts first
+    for log in malicious_logs:
+        host = log.hostname
+        if (host and host in CRITICAL_HOSTS
+                and host not in already_isolated
+                and ("ISOLATE_HOST", host) not in history_set):
+            return Action(
+                action_type=ActionType.ISOLATE_HOST,
+                target=host,
+                reasoning=f"Smart Policy: Isolate critical host {host} [{log.severity}]."
+            )
+
+    # 3. Isolate any compromised host
+    for log in malicious_logs:
+        host = log.hostname
+        if (host and host not in already_isolated
+                and ("ISOLATE_HOST", host) not in history_set):
+            return Action(
+                action_type=ActionType.ISOLATE_HOST,
+                target=host,
+                reasoning=f"Smart Policy: Isolate compromised host {host}."
+            )
+
+    # 4. Terminate processes (last resort before no-action)
+    for log in malicious_logs:
+        host = log.hostname
+        if host and ("TERMINATE_PROCESS", host) not in history_set:
+            return Action(
+                action_type=ActionType.TERMINATE_PROCESS,
+                target=host,
+                reasoning=f"Smart Policy: Terminate malicious process on {host}."
+            )
+
+    # 5. No novel action available
+    return Action(
+        action_type=ActionType.MONITOR,
+        target="none",
+        reasoning="Smart Policy: All known threats already handled."
+    )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# LLM SYSTEM PROMPT
+# ─────────────────────────────────────────────────────────────────────────────
+_SYSTEM_PROMPT = """You are an autonomous SOC security engineer.
+
+VALID action_type values (use EXACTLY one):
+  BLOCK_IP | ISOLATE_HOST | TERMINATE_PROCESS | MONITOR | NO_ACTION
+
+RULES:
+- Target must be an exact IP or hostname from the logs shown.
+- Never repeat a target already in HISTORY.
+- MONITOR/NO_ACTION only if zero active threats.
+- Prefer BLOCK_IP for external IPs, ISOLATE_HOST for internal hosts.
+
+Respond with ONLY this JSON (no extra text):
+{"action_type": "BLOCK_IP", "target": "<value>", "reasoning": "<one sentence>"}
 """
 
-def _build_user_prompt(obs: Observation, feedback: str = "", history: List[tuple] = None) -> str:
-    """Constructs the payload for the LLM agent."""
-    
-    # 1. Summarize Logs
-    log_summary = ""
-    for log in obs.logs[-15:]: # Look at last 15 logs
-        log_summary += f"- [{log.severity}] {log.event_type} on {log.hostname} (src={log.source_ip})\n"
-    
-    # 2. Get Memory Support (Passing History to avoid redundancy)
-    similar_exp = memory.retrieve_similar_experience(str(obs.logs), exclude_history=history)
-    memory_context = ""
-    if similar_exp:
-        memory_context = f"\nFAST-PATH MEMORY HIT ({similar_exp.kill_chain_stage}): Success with {similar_exp.action} on {similar_exp.target}."
-    
-    # 3. Get Failure Prevention
-    failure_warnings = memory.get_failure_warnings()
 
-    # 4. Format History
-    history_str = "\nACTION HISTORY (Current Session):\n"
-    if history:
-        for action_type, target in history[-5:]:
-            history_str += f"- {action_type} on {target}\n"
-    else:
-        history_str += "- None"
+def _build_llm_prompt(obs: Observation, feedback: str, history: List[Tuple[str, str]]) -> str:
+    """Minimal, token-efficient prompt for the LLM."""
+    sys_state = (
+        obs.system_state
+        if isinstance(obs.system_state, dict)
+        else obs.system_state.model_dump()
+    )
+    log_lines = ""
+    for log in obs.logs[-8:]:  # Limit to 8 most recent logs
+        flag = "MALICIOUS" if log.is_malicious else "benign"
+        log_lines += f"  [{flag}] {log.event_type} | host={log.hostname} | src={log.source_ip} | sev={log.severity}\n"
 
-    prompt = f"""
-### SITUATION (Step {obs.step_id})
-Status: {obs.system_state.status} | Threats: {obs.system_state.active_threats} | Compromise: {obs.system_state.compromise_level}%
+    history_str = ", ".join([f"{a}:{t}" for a, t in history[-5:]]) or "none"
 
-### RECENT LOGS
-{log_summary or "No recent logs."}
+    return f"""Threats={obs.num_active_threats} | Step={obs.step_id}
+Blocked={sys_state.get('blocked_ips',[])} | Isolated={sys_state.get('isolated_hosts',[])}
+History={history_str}
+Feedback={feedback or 'none'}
+Logs:
+{log_lines}"""
 
-### PROTECTION STATE
-Blocked: {obs.system_state.blocked_ips}
-Isolated: {obs.system_state.isolated_hosts}
-{history_str}
 
-{memory_context}
-{failure_warnings}
-
-### FEEDBACK
-{feedback or "None."}
-
-What is your move? Return valid JSON.
-"""
-    return prompt
-
-def _select_best_action(llm_choices: List[Action], obs: Observation, history: List[tuple] = None) -> Action:
+# ─────────────────────────────────────────────────────────────────────────────
+# LLM CALL (Optional Enhancement — never crashes episode)
+# ─────────────────────────────────────────────────────────────────────────────
+def _try_llm_action(obs: Observation, feedback: str, history: List[Tuple[str, str]]) -> Optional[Action]:
     """
-    Heuristic selector updated with internal asset priority and history awareness.
+    Attempts an LLM-guided action. Returns None on any failure.
+    Caller seamlessly falls back to smart policy on None return.
     """
-    scores = []
-    history_set = set(history or [])
-    
-    visible_targets = set()
-    for l in obs.logs:
-        visible_targets.add(l.source_ip)
-        visible_targets.add(l.hostname)
-
-    for action in llm_choices:
-        score = 0.0
-        # Ensure we compare against strings
-        act_type_str = str(action.action_type).split('.')[-1].upper()
-        
-        # 🟢 Reward visibility and Internal Assets
-        if action.target in visible_targets:
-            score += 15.0
-        if any(keyword in action.target.lower() for keyword in ["dc", "db", "server", "prod"]):
-            score += 10.0
-        
-        # 🔴 Penalize redundancy (Hard Penalty)
-        if (act_type_str, action.target) in history_set:
-            score -= 50.0
-        if action.action_type == ActionType.BLOCK_IP and action.target in obs.system_state.blocked_ips:
-            score -= 50.0
-        if action.action_type == ActionType.ISOLATE_HOST and action.target in obs.system_state.isolated_hosts:
-            score -= 50.0
-            
-        # 🔵 Safety rails
-        if action.target == "none" and obs.system_state.active_threats > 0:
-            score -= 30.0
-            
-        scores.append(score)
-    
-    best_idx = scores.index(max(scores))
-    return llm_choices[best_idx]
-
-
-def _llm_action(obs: dict, last_feedback: str = "", history: List[tuple] = None) -> dict:
-    """
-    Main defender brain updated with session history tracking.
-    """
-    observation = Observation(**obs)
-    
-    # 1. Fast-Path Memory Hit
-    similar_exp = memory.retrieve_similar_experience(str(observation.logs), exclude_history=history)
-    if similar_exp and similar_exp.reward > 0.8:
-        return {
-            "action_type": similar_exp.action,
-            "target": similar_exp.target,
-            "reasoning": f"Memory Hit: Success with {similar_exp.action} on {similar_exp.target}."
-        }
-
-    # 2. Consult LLM
     try:
         response = client.chat.completions.create(
             model=MODEL_NAME,
             messages=[
-                {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user", "content": _build_user_prompt(observation, last_feedback, history)}
+                {"role": "system", "content": _SYSTEM_PROMPT},
+                {"role": "user",   "content": _build_llm_prompt(obs, feedback, history)}
             ],
-            response_format={ "type": "json_object" }
+            response_format={"type": "json_object"},
+            temperature=TEMPERATURE,
+            max_tokens=MAX_TOKENS,
+            top_p=TOP_P,        # determinism: 1.0 = no nucleus sampling restriction
         )
-        
-        content = response.choices[0].message.content
-        
-        # Robust JSON extraction (in case model ignores response_format)
-        if "```json" in content:
-            content = content.split("```json")[1].split("```")[0].strip()
-        elif "{" in content and "}" in content:
-            # Simple heuristic for naked JSON in text
-            start = content.find("{")
-            end = content.rfind("}") + 1
-            content = content[start:end]
-            
-        raw_res = json.loads(content)
-        
-        # Handle case-sensitivity and variations
-        atype = raw_res.get("action_type") or raw_res.get("action") or "NO_ACTION"
-        target = raw_res.get("target") or raw_res.get("destination") or "none"
-        reasoning = raw_res.get("reasoning") or raw_res.get("thought") or "Analyzed."
 
-        action = Action(
-            action_type=ActionType(str(atype).upper()),
-            target=str(target),
-            reasoning=str(reasoning)
+        raw = json.loads(response.choices[0].message.content)
+        atype_str = str(raw.get("action_type", "")).upper().strip()
+        target    = str(raw.get("target", "none")).strip()
+        reasoning = str(raw.get("reasoning", "LLM action."))
+
+        # Validate enum
+        valid_types = {e.value for e in ActionType}
+        if atype_str not in valid_types:
+            logger.warning(f"LLM returned invalid action_type '{atype_str}' — discarding.")
+            return None
+
+        sys_state = (
+            obs.system_state
+            if isinstance(obs.system_state, dict)
+            else obs.system_state.model_dump()
         )
-        
-        return action.model_dump()
-        
+        blocked  = set(sys_state.get("blocked_ips",    []) or [])
+        isolated = set(sys_state.get("isolated_hosts", []) or [])
+
+        # Reject low-quality responses
+        if obs.num_active_threats > 0:
+            if atype_str in ("NO_ACTION", "MONITOR"):
+                logger.warning("LLM chose passive action during active threat — discarding.")
+                return None
+            if target in ("none", "", "null") and atype_str in ("BLOCK_IP", "ISOLATE_HOST", "TERMINATE_PROCESS"):
+                logger.warning(f"LLM gave empty target for {atype_str} — discarding.")
+                return None
+            # Redirect redundant actions to next-best rather than hard failing
+            if atype_str == "BLOCK_IP" and target in blocked:
+                logger.info(f"LLM wants to re-block {target} — redirecting to ISOLATE_HOST.")
+                # Try isolating the hostname associated with this IP from logs
+                for log in obs.logs:
+                    if log.source_ip == target and log.hostname and log.hostname not in isolated:
+                        return Action(
+                            action_type=ActionType.ISOLATE_HOST,
+                            target=log.hostname,
+                            reasoning=f"Redirected: isolating {log.hostname} (source IP already blocked)."
+                        ).model_dump()
+                return None  # No valid redirect available
+            if atype_str == "ISOLATE_HOST" and target in isolated:
+                logger.info(f"LLM wants to re-isolate {target} — discarding.")
+                return None
+
+        return Action(action_type=ActionType(atype_str), target=target, reasoning=reasoning).model_dump()
+
     except Exception as e:
-        print(f"   ⚠️ LLM Error: {e}")
-        return {"action_type": "NO_ACTION", "target": "none", "reasoning": f"Fallback: {str(e)}"}
+        logger.warning(f"LLM call failed: {type(e).__name__}: {e}")
+        return None
 
 
-def run_episode(task_id: str = "task_01"):
-    """Runs evaluation with history tracking."""
-    
-    print(f"[*] Starting Evaluation: {task_id}...")
-    reset_resp = requests.post(f"{ENV_BASE_URL}/v1/reset", json={"task_id": task_id}).json()
-    obs = reset_resp["observation"]
-    done = obs.get("done", False)
-    
-    step = 0
-    last_feedback = ""
-    action_history = [] 
-    
-    while not done:
-        step += 1
-        print(f"\nBLUE TEAM ANALYZING...")
-        action = _llm_action(obs, last_feedback, history=action_history)
-        
-        # Add to history (standardized as strings) for subsequent rounds
-        act_type_str = str(action["action_type"]).split('.')[-1].upper()
-        action_history.append((act_type_str, action["target"]))
+# ─────────────────────────────────────────────────────────────────────────────
+# HYBRID DECISION
+# ─────────────────────────────────────────────────────────────────────────────
+def _decide_action(
+    step: int,
+    obs: Observation,
+    feedback: str,
+    history: List[Tuple[str, str]],
+    telemetry: dict
+) -> Tuple[dict, str]:
+    """
+    Returns (action_dict, decision_source).
+    Tries LLM every LLM_CALL_INTERVAL steps; smart policy otherwise.
+    """
+    use_llm = (step % LLM_CALL_INTERVAL == 0)
 
-        icon = "[LLM REASONING]"
-        if "Memory" in action.get("reasoning", ""):
-            icon = "[MEMORY HIT]"
-            
-        print(f"   {icon}")
-        print(f"   Action: {action['action_type']:20s} | Target: {action['target']}")
-        print(f"   Reasoning: {action['reasoning']}")
-        
-        # 3. Execute Step
-        step_resp = requests.post(
-            f"{ENV_BASE_URL}/v1/step", 
-            json={"action": action}
+    if use_llm:
+        telemetry["llm_attempts"] += 1
+        llm_action = _try_llm_action(obs, feedback, history)
+        if llm_action:
+            telemetry["llm_successes"] += 1
+            return llm_action, "LLM"  # already a dict from _try_llm_action
+        else:
+            telemetry["llm_failures"] += 1
+            telemetry["fallback_steps"].append(step)
+            if not ALLOW_FALLBACK:
+                logger.warning(f"Step {step}: LLM failed and ALLOW_FALLBACK=False — aborting episode.")
+                return None, "ABORT"
+            logger.info(f"Step {step}: LLM failed → smart policy fallback")
+
+    # Default: smart deterministic policy
+    action = _smart_policy(obs, history)
+    return action.model_dump(), "POLICY"
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# MAIN EPISODE LOOP
+# ─────────────────────────────────────────────────────────────────────────────
+def run_episode(task_id: str = "task_hard") -> Optional[dict]:
+    """
+    Runs a full evaluation episode. Always completes — never aborts on LLM failure.
+    Returns structured result with bounded final_grader_score ∈ [0.0, 1.0].
+    """
+    telemetry = {
+        "llm_attempts":  0,
+        "llm_successes": 0,
+        "llm_failures":  0,
+        "fallback_steps": [],
+        "policy_steps":  [],
+        "rewards":       [],
+    }
+
+    print(f"[START] Evaluation: {task_id} | Model: {MODEL_NAME} | "
+          f"MaxSteps: {MAX_STEPS} | LLM every {LLM_CALL_INTERVAL} steps | "
+          f"Seed: {RANDOM_SEED}")
+
+    try:
+        # ── Reset environment ─────────────────────────────────────────────
+        reset_resp = requests.post(
+            f"{ENV_BASE_URL}/v1/reset",
+            json={"task_id": task_id}
         ).json()
-        
-        reward = step_resp["reward"]
-        obs = step_resp["observation"]
-        done = reward.get("done", False)
-        last_feedback = reward.get("feedback", "")
-        
-        # 4. Save to Memory (Crucial for learning!)
-        exp = Experience(
-            state_summary=str(obs.get("logs", ""))[:200],
-            action=action["action_type"],
-            target=action["target"],
-            reward=reward.get("score", 0.0),
-            feedback=last_feedback,
-            reasoning=action.get("reasoning", ""),
-            success=reward.get("score", 0.0) > 0,
-            timestamp=datetime.now().isoformat(),
-            kill_chain_stage=detect_stage(obs.get("logs", [])).value
-        )
-        memory.save_experience(exp)
 
-        print(f"   Reward: {reward.get('score'):.3f} | Feedback: {last_feedback}")
+        obs_data = reset_resp.get("observation")
+        if not obs_data:
+            raise RuntimeError(f"Reset failed — no observation returned: {reset_resp}")
 
-    # 5. Final Result
-    result = requests.get(f"{ENV_BASE_URL}/v1/result").json()
-    print("\n" + "="*50)
-    print(" EPISODE COMPLETE")
-    print("="*50)
-    print(f"   Final Result: {result.get('summary')}")
-    print(f"   Final Score:  {result.get('final_grader_score'):.4f}")
-    
-    return result
+        obs = Observation.model_validate(obs_data)
+        done, step = False, 0
+        last_feedback  = ""
+        action_history: List[Tuple[str, str]] = []
+
+        # ── Episode Loop ──────────────────────────────────────────────────
+        while not done and step < MAX_STEPS:
+            step += 1
+
+            action, source = _decide_action(step, obs, last_feedback, action_history, telemetry)
+
+            # Handle abort (ALLOW_FALLBACK=False + LLM failure)
+            if source == "ABORT" or action is None:
+                print(f"[ABORT] Episode terminated at step {step} (LLM failure, no fallback).")
+                print(f"[END] Final Score: 0.0000 | Result: Aborted at step {step}")
+                _log_telemetry(telemetry, step)
+                return {"final_grader_score": 0.0, "summary": f"Aborted: LLM failure at step {step}", "aborted": True}
+
+            if source == "POLICY":
+                telemetry["policy_steps"].append(step)
+
+            # Track history
+            act_str = str(action["action_type"]).split(".")[-1].upper()
+            action_history.append((act_str, action["target"]))
+
+            # Execute step
+            step_resp = requests.post(
+                f"{ENV_BASE_URL}/v1/step",
+                json={"action": action}
+            ).json()
+
+            if step_resp.get("error"):
+                logger.error(f"Server error at step {step}: {step_resp['error']}")
+                break
+
+            reward_data  = step_resp.get("reward", {"value": 0.0, "feedback": ""})
+            obs_data     = step_resp.get("observation")
+            if not obs_data:
+                logger.error(f"No observation at step {step}. Response: {step_resp}")
+                break
+
+            obs           = Observation.model_validate(obs_data)
+            done          = step_resp.get("done", False)
+            last_feedback = reward_data.get("feedback", "")
+            reward_val    = max(0.0, min(1.0, float(reward_data.get("value", 0.0))))
+
+            telemetry["rewards"].append(reward_val)
+
+            # [STEP] — OpenEnv mandatory marker
+            print(
+                f"[STEP] Step: {step:02d} | Source: {source:<6} | "
+                f"Action: {act_str:<20} | Target: {action['target']:<22} | "
+                f"Reward: {reward_val:.2f} | Done: {done}"
+            )
+
+            # Persist to memory
+            log_text = "\n".join([str(l) for l in obs.logs])
+            memory.save_experience(Experience(
+                state_summary=log_text[:200],
+                action=act_str,
+                target=action["target"],
+                reward=reward_val,
+                feedback=last_feedback,
+                reasoning=action.get("reasoning", ""),
+                success=reward_val > 0.4,
+                timestamp=datetime.now().isoformat(),
+                kill_chain_stage=detect_stage(obs.logs).value
+            ))
+
+        # ── Fetch Final Score ─────────────────────────────────────────────
+        result = requests.get(f"{ENV_BASE_URL}/v1/result").json()
+        score  = result.get("final_grader_score")
+        score  = float(max(0.0, min(1.0, score))) if score is not None else 0.0
+        summary = result.get("summary", "N/A")
+
+        print(f"[END] Final Score: {score:.4f} | Result: {summary}")
+        _log_telemetry(telemetry, step)
+
+        return {**result, "final_grader_score": score}
+
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        print(f"[ERROR] Episode failed: {e}")
+        _log_telemetry(telemetry, step if "step" in dir() else 0)
+        return None
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# TELEMETRY REPORT
+# ─────────────────────────────────────────────────────────────────────────────
+def _log_telemetry(t: dict, total_steps: int):
+    """Prints structured transparency telemetry after every episode."""
+    attempts  = t["llm_attempts"]
+    successes = t["llm_successes"]
+    failures  = t["llm_failures"]
+    rate      = f"{100 * successes / attempts:.1f}%" if attempts > 0 else "N/A"
+
+    rewards = t["rewards"]
+    avg_r   = f"{sum(rewards)/len(rewards):.3f}" if rewards else "N/A"
+    max_r   = f"{max(rewards):.3f}" if rewards else "N/A"
+
+    print(
+        f"\n[TELEMETRY] "
+        f"TotalSteps={total_steps} | "
+        f"LLM_Calls={attempts} | LLM_OK={successes} ({rate}) | LLM_Fail={failures} | "
+        f"PolicySteps={len(t['policy_steps'])} | "
+        f"Fallbacks={len(t['fallback_steps'])} at steps {t['fallback_steps'] or 'none'} | "
+        f"AvgReward={avg_r} | MaxReward={max_r}"
+    )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# ENTRY POINT
+# ─────────────────────────────────────────────────────────────────────────────
 if __name__ == "__main__":
-    # If run directly, evaluate on task_02 (The hardest baseline)
-    run_episode("task_02")
+    task = "task_hard"
+    for arg in sys.argv[1:]:
+        if arg in ("task_easy", "task_medium", "task_hard"):
+            task = arg
+    run_episode(task)

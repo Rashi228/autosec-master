@@ -83,12 +83,23 @@ class Observation(BaseModel):
     step_id: int
     task_id: str
     logs: List[SecurityLog] = Field(default_factory=list)
-    system_state: SystemState = Field(default_factory=SystemState)
-    done: bool = False
+    system_state: Dict[str, Any] = Field(default_factory=dict)
+    
+    # Structured Features for RL Agents
+    num_active_threats: int = 0
+    threat_severity_sum: int = 0
+    recent_event_types: List[str] = Field(default_factory=list)
+    impact_score: float = 0.0 # 0.0 to 1.0 (CriticalITY of compromised assets)
+    
+class Reward(BaseModel):
+    value: float = Field(default=0.0, ge=0.0, le=1.0)
+    deterministic_score: float = Field(default=0.0, ge=0.0, le=1.0)
+    feedback: str = ""
+    is_terminal: bool = False
 
 class Action(BaseModel):
-    strategy: Optional[StrategyType] = StrategyType.NONE
-    tactic: Optional[TacticType] = TacticType.NO_ACTION
+    strategy: StrategyType = StrategyType.NONE
+    tactic: TacticType = TacticType.NO_ACTION
     action_type: ActionType
     target: str # IP, Hostname, or User
     reasoning: str = ""
@@ -107,6 +118,7 @@ class EpisodeResult(BaseModel):
     threats_resolved: int
     threats_total: int
     false_positives: int
+    persona_scores: Dict[str, Any] = Field(default_factory=dict)
     summary: str
 
 class TaskInfo(BaseModel):

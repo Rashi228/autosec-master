@@ -9,26 +9,26 @@ from typing import Dict, Any, List, Optional
 from autosec_openenv.models import TaskInfo
 
 SCENARIOS = {
-    "task_01": TaskInfo(
-        task_id="task_01",
-        name="Brute Force Containment",
+    "task_easy": TaskInfo(
+        task_id="task_easy",
+        name="L1: Perimeter Breach",
         difficulty="EASY",
-        description="Stop an external brute-force attack on a single host.",
+        description="A single host is experiencing a brute-force attack. High visibility, immediate logs.",
+        max_steps=5
+    ),
+    "task_medium": TaskInfo(
+        task_id="task_medium",
+        name="L2: Lateral Movement",
+        difficulty="MEDIUM",
+        description="An attacker has gained a foothold. LOG DELAY: Indicators appear 1 step after the event.",
         max_steps=10
     ),
-    "task_02": TaskInfo(
-        task_id="task_02",
-        name="Privilege Escalation & Lateral Movement",
-        difficulty="MEDIUM",
-        description="Contain an attacker attempting to escalate to Domain Admin.",
-        max_steps=15
-    ),
-    "task_03": TaskInfo(
-        task_id="task_03",
-        name="Data Exfiltration Discovery",
+    "task_hard": TaskInfo(
+        task_id="task_hard",
+        name="L3: Advanced Exfiltration",
         difficulty="HARD",
-        description="Identify and disrupt a covert data exfiltration channel.",
-        max_steps=20
+        description="A stealthy attacker is exfiltrating data. STEALTH: 50% chance for attacker actions to be 'silent' (no logs).",
+        max_steps=15
     )
 }
 
@@ -43,7 +43,7 @@ class TaskManager:
 
     @staticmethod
     def get_task(task_id: str) -> TaskInfo:
-        return SCENARIOS.get(task_id, SCENARIOS["task_01"])
+        return SCENARIOS.get(task_id, SCENARIOS["task_easy"])
 
 def load_scenario(task_id: str) -> TaskInfo:
     """Helper for simulation environment."""
