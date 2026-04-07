@@ -1,65 +1,114 @@
 """
-graders.py — SOC Episode Scaling & Grading
+graders.py — SOC Episode Scoring & Grading
 ==========================================
-Evaluates the defender's performance relative to the 
-original Meta OpenEnv task specifications.
+Evaluates defender performance with partial credit scoring.
+Formula: (resolved / total) - (errors × 0.02), bounded [0.0, 1.0]
 """
 
-from typing import List, Dict, Any, Optional
-from autosec_openenv.models import SystemState, Action, ActionType, Severity, EpisodeResult
+from typing import List, Any
+from autosec_openenv.models import SystemState, Action, ActionType, EpisodeResult
+from backend.evaluator.personas import MultiPersonaEvaluator
+
 
 class SOCGrader:
     """
-    Detailed evaluator for SOC response quality.
+    Grader for OpenEnv SOC scenarios.
+    Supports partial credit and persona-weighted scoring.
     """
 
     def __init__(self, task_id: str):
         self.task_id = task_id
-        self.total_threats = 0
-        self.resolved_threats = 0
-        self.false_positives = 0
-        self.total_steps = 0
+        self.evaluator = MultiPersonaEvaluator()
 
-    def record_step(self, action: Action, state: SystemState, reward: float):
-        self.total_steps += 1
-        if reward > 0:
-            self.resolved_threats += 1
-        elif reward < -0.1 and action.action_type != ActionType.NO_ACTION:
-            self.false_positives += 1
-
-    def calculate_final_score(self) -> float:
+    def calculate_final_score(
+        self,
+        final_state: dict,
+        threats_resolved: int,
+        threats_total: int,   # ← always named threats_total here
+        errors: int
+    ) -> float:
         """
-        Normalized score (0.0 to 1.0).
-        High resolve rate + low false positive rate = high score.
+        Deterministic [0.0, 1.0] base score.
+        Inputs are validated and clamped before use.
         """
-        if self.total_steps == 0: return 0.0
-        
-        # Simple Weighted Scoring
-        resolve_rate = min(1.0, self.resolved_threats / max(1, self.total_threats))
-        error_penalty = min(0.5, self.false_positives * 0.1)
-        
-        return max(0.0, resolve_rate - error_penalty)
+        threats_total    = max(1, int(threats_total or 1))            # safe default ≥ 1
+        threats_resolved = max(0, min(int(threats_resolved or 0), threats_total))
+        errors           = max(0, int(errors or 0))
 
-    def get_episode_result(self, cumulative_reward: float) -> EpisodeResult:
-        score = self.calculate_final_score()
-        summary = f"Task '{self.task_id}' concluded. Threats resolved: {self.resolved_threats}."
-        
-        return EpisodeResult(
-            task_id=self.task_id,
-            total_steps=self.total_steps,
-            final_grader_score=score,
-            cumulative_reward=cumulative_reward,
-            threats_resolved=self.resolved_threats,
-            threats_total=max(self.resolved_threats, 3), # Heuristic for eval
-            false_positives=self.false_positives,
-            action_history=[], # To be populated by env
-            summary=summary
+        resolve_rate  = threats_resolved / threats_total               # ∈ [0.0, 1.0]
+        error_penalty = errors * 0.02                                  # gentle penalty
+
+        return float(max(0.0, min(1.0, resolve_rate - error_penalty)))
+
+    def get_episode_result(
+        self,
+        final_state_obj: SystemState,
+        total_steps: int,
+        cumulative_reward: float,
+        threats_resolved: int,
+        threats_total: int,
+        errors: int,
+        action_history: List[Any],
+        logs: List[Any]
+    ) -> EpisodeResult:
+        """
+        Computes the full episode result with persona-weighted final score.
+        Never crashes — all inputs are validated.
+        """
+        # Validate all inputs defensively
+        threats_total    = max(1, int(threats_total    or 1))
+        threats_resolved = max(0, min(int(threats_resolved or 0), threats_total))
+        errors           = max(0, int(errors           or 0))
+        total_steps      = max(0, int(total_steps      or 0))
+        cumulative_reward = float(cumulative_reward     or 0.0)
+
+        # 1. Base score
+        base_score = self.calculate_final_score(
+            final_state_obj.model_dump(),
+            threats_resolved,
+            threats_total,
+            errors
         )
 
-def grade_episode(task_id: str, state: SystemState, history: List[Action]) -> float:
-    """Helper for standalone grading."""
-    grader = SOCGrader(task_id)
-    # Re-play actions locally
-    for a in history:
-        grader.record_step(a, state, 0.4)
-    return grader.calculate_final_score()
+        # 2. Persona evaluation (last action in history)
+        persona_data = {}
+        final_score  = base_score
+        try:
+            if action_history:
+                last_raw    = action_history[-1]
+                last_action = (
+                    Action.model_validate(last_raw)
+                    if isinstance(last_raw, dict)
+                    else last_raw
+                )
+                eval_res     = self.evaluator.evaluate_action(last_action, final_state_obj, logs)
+                persona_data = eval_res.get("personas", {})
+                persona_score = float(eval_res.get("final_persona_score", base_score))
+                # Blend: 70% base + 30% persona
+                final_score  = (base_score * 0.7) + (persona_score * 0.3)
+        except Exception:
+            # Persona eval failure must not break grading
+            final_score = base_score
+
+        # Ensure final score is always bounded
+        final_score = float(max(0.0, min(1.0, final_score)))
+
+        # 3. Build human-readable summary — uses threats_total everywhere (no NameError)
+        summary = (
+            f"Task '{self.task_id}' concluded. "
+            f"Score: {final_score:.2f} "
+            f"(Resolved: {threats_resolved}/{threats_total}, "
+            f"Errors: {errors}, Penalty: {errors * 0.02:.2f})"
+        )
+
+        return EpisodeResult(
+            task_id=self.task_id,
+            total_steps=total_steps,
+            final_grader_score=final_score,
+            cumulative_reward=cumulative_reward,
+            threats_resolved=threats_resolved,
+            threats_total=threats_total,
+            false_positives=errors,
+            persona_scores=persona_data,
+            summary=summary
+        )

@@ -1,9 +1,14 @@
 """
-war_room.py — Interactive SOC Dashboard
-========================================
-Runs a live 'War Room' demo of the SOC in action.
-Shows the Red Team (Attacker) movements vs. Blue Team (Defender) 
-decisions in real-time.
+war_room.py — Interactive SOC War Room Demo
+============================================
+Runs a live cinematic simulation of the SOC in action.
+Shows Red Team (Attacker) vs Blue Team (Defender) in real-time.
+
+Usage:
+    python war_room.py                        # task_hard (default)
+    python war_room.py --task task_easy
+    python war_room.py --task task_medium
+    python war_room.py --task task_hard
 """
 
 import os
@@ -14,132 +19,202 @@ import argparse
 from datetime import datetime
 from dotenv import load_dotenv
 
-from autosec_openenv.models import Action, ActionType, SecurityLog, Observation, SystemState
+from autosec_openenv.models import Action, ActionType, Observation
 from autosec_openenv.memory import ExperienceMemory, Experience
 from autosec_openenv.kill_chain import detect_stage
 
-# Load environment variables
 load_dotenv()
 
-# Configuration
 ENV_BASE_URL = os.getenv("ENV_BASE_URL", "http://localhost:7860")
-memory = ExperienceMemory()
+MAX_STEPS    = int(os.getenv("MAX_STEPS", "15"))
+memory       = ExperienceMemory()
+
+SEVERITY_COLOR = {
+    "CRITICAL": "🔴",
+    "HIGH":     "🟠",
+    "MEDIUM":   "🟡",
+    "LOW":      "🟢",
+    "INFO":     "⚪",
+}
+
 
 def run_war_room(task_id: str):
-    print("\n" + "🔥" * 30)
-    print("      AUTOSEC OPENENV — LIVE WAR ROOM")
-    print("      Defender (Blue) vs. Adaptive Attacker (Red)")
-    print("🔥" * 30 + "\n")
+    print("\n" + "═" * 62)
+    print("  🛡️  AUTOSEC OPENENV — LIVE WAR ROOM SIMULATION")
+    print("      Blue Team (Defender) vs Red Team (Attacker)")
+    print("═" * 62 + "\n")
 
-    # 1. Reset Environment in 'war_room' mode
-    print(f"[*] Initializing War Room for {task_id}...")
+    # Import the hybrid decision system from inference.py
     try:
-        from inference import _llm_action
-    except ImportError:
-        print("❌ CRITICAL: Could not find 'inference.py'. Make sure it is in the root directory.")
+        from inference import _smart_policy, _try_llm_action, LLM_CALL_INTERVAL
+    except ImportError as e:
+        print(f"❌ Could not import inference.py: {e}")
         sys.exit(1)
 
-    reset_resp = requests.post(f"{ENV_BASE_URL}/v1/reset", json={"task_id": task_id, "mode": "war_room"}).json()
-    obs = reset_resp["observation"]
-    done = obs.get("done", False)
-    
+    # Reset environment
+    print(f"[*] Initializing War Room: {task_id} | MaxSteps: {MAX_STEPS}")
+    reset_resp = requests.post(
+        f"{ENV_BASE_URL}/v1/reset",
+        json={"task_id": task_id}
+    ).json()
+
+    obs_data = reset_resp.get("observation")
+    if not obs_data:
+        print(f"❌ Reset failed: {reset_resp}")
+        sys.exit(1)
+
+    obs  = Observation.model_validate(obs_data)
+    done = False
     step = 0
-    last_feedback = ""
+    last_feedback  = ""
+    action_history = []
+    total_reward   = 0.0
 
-    while not done:
+    # ── Episode Loop ──────────────────────────────────────────────────────────
+    while not done and step < MAX_STEPS:
         step += 1
-        print(f"\n{'='*60}")
-        print(f" ROUND {step}")
-        print(f"{'='*60}")
 
-        # --- Attacker's Turn (Happened in previous env.step or reset) ---
-        env_state = requests.get(f"{ENV_BASE_URL}/v1/state").json()
-        attacker_move = env_state.get("last_attacker_action")
-        
+        print(f"\n{'─' * 62}")
+        print(f"  ROUND {step:02d}/{MAX_STEPS}  |  Active Threats: {obs.num_active_threats}  |  Impact: {obs.impact_score:.2f}")
+        print(f"{'─' * 62}")
+
+        # ── Red Team ─────────────────────────────────────────────────────────
+        env_state      = requests.get(f"{ENV_BASE_URL}/v1/state").json()
+        attacker_move  = env_state.get("last_attacker_action")
+
         if attacker_move:
-            print(f"\n🔴 [RED TEAM MOVE]")
-            print(f"   Action: {attacker_move.get('attack_type'):20s} | Target: {attacker_move.get('target_host')}")
-            print(f"   Source: {attacker_move.get('source_ip')}")
-            print(f"   Reasoning: {attacker_move.get('reasoning')}")
+            print(f"\n  🔴 RED TEAM MOVE")
+            print(f"     Tactic  : {attacker_move.get('attack_type', 'UNKNOWN')}")
+            print(f"     Target  : {attacker_move.get('target_host', '?')}")
+            print(f"     Source  : {attacker_move.get('source_ip', '?')}")
         else:
-            print(f"\n🔴 [RED TEAM] Initializing reconnaissance...")
+            print(f"\n  🔴 RED TEAM  : Initializing reconnaissance...")
 
-        # --- Logs Created by Attacker ---
-        logs = obs.get("logs", [])
+        # ── Log Stream ───────────────────────────────────────────────────────
+        logs  = obs.logs
         stage = detect_stage(logs)
-        
-        print(f"\n📊 [LOG STREAM] — Stage: {stage.value.upper()}")
-        for log in logs:
-            severity = f"[{log.get('severity')}]"
-            print(f"   {severity:10s} {log.get('event_type'):30s} src={log.get('source_ip') or 'internal'}")
+        print(f"\n  📊 LOG STREAM  — Kill Chain: {stage.value.upper()}")
 
-        print(f"\n🔵 [BLUE TEAM ANALYZING...]")
-        action = _llm_action(obs, last_feedback)
-        
-        icon = "🧠 [MEMORY HIT]" if "Memory" in action.get("reasoning", "") else "🤖 [LLM REASONING]"
-        # Add to history (standardized as strings) for subsequent rounds
-        act_type_str = str(action["action_type"]).split('.')[-1].upper()
-        action_history.append((act_type_str, action["target"]))
-        print(f"   {icon}")
-        print(f"   Action: {action['action_type']:20s} | Target: {action['target']}")
-        print(f"   Reasoning: {action['reasoning']}")
+        for log in logs[-6:]:  # Show last 6 logs
+            sev    = str(log.severity).upper().split(".")[-1]
+            icon   = SEVERITY_COLOR.get(sev, "⚪")
+            flag   = "⚠ MALICIOUS" if log.is_malicious else "  benign "
+            print(f"     {icon} {flag} | {str(log.event_type):<28} | src={log.source_ip or 'internal'}")
 
-        # --- Submit Action ---
-        step_resp_raw = requests.post(f"{ENV_BASE_URL}/v1/step", json={"action": action})
-        if step_resp_raw.status_code != 200:
-            print(f"\n❌ SERVER ERROR DURING STEP: {step_resp_raw.status_code}")
-            try:
-                print(f"   Detail: {step_resp_raw.json().get('detail')}")
-            except:
-                print(f"   Response: {step_resp_raw.text}")
-            sys.exit(1)
-            
-        step_resp = step_resp_raw.json()
-        reward = step_resp["reward"]
-        obs = step_resp["observation"]
-        done = reward.get("done", False)
-        last_feedback = reward.get("feedback", "")
-        
-        # 💾 SAVE TO MEMORY (New!)
-        exp = Experience(
-            state_summary=str(obs.get("logs", ""))[:200],
-            action=action["action_type"],
-            target=action["target"],
-            reward=reward.get("score", 0.0),
-            feedback=last_feedback,
-            reasoning=action.get("reasoning", ""),
-            success=reward.get("score", 0.0) > 0,
-            timestamp=datetime.now().isoformat(),
-            kill_chain_stage=detect_stage(obs.get("logs", [])).value
+        # ── Blue Team Decision ────────────────────────────────────────────────
+        print(f"\n  🔵 BLUE TEAM ANALYZING...")
+        time.sleep(0.4)  # Dramatic pause
+
+        use_llm = (step % LLM_CALL_INTERVAL == 0)
+        source  = "POLICY"
+        action_obj = None
+
+        if use_llm:
+            action_dict = _try_llm_action(obs, last_feedback, action_history)
+            if action_dict:
+                source     = "LLM 🧠"
+                action_obj = Action.model_validate(action_dict)
+
+        if action_obj is None:
+            action_obj = _smart_policy(obs, action_history)
+            source     = "POLICY ⚙️"
+
+        action_dict = action_obj.model_dump()
+        act_str     = str(action_obj.action_type).split(".")[-1].upper()
+        action_history.append((act_str, action_obj.target))
+
+        print(f"     Source    : {source}")
+        print(f"     Decision  : {act_str}")
+        print(f"     Target    : {action_obj.target}")
+        print(f"     Reasoning : {action_obj.reasoning}")
+
+        # ── Submit Action ─────────────────────────────────────────────────────
+        step_resp = requests.post(
+            f"{ENV_BASE_URL}/v1/step",
+            json={"action": action_dict}
         )
-        memory.save_experience(exp)
 
-        print(f"\n💰 [OUTCOME]")
-        score = reward.get('score') or 0.0
-        cum_score = reward.get('cumulative_score') or 0.0
-        print(f"   Score: {score:.3f} | Total: {cum_score:.3f}")
-        print(f"   Feedback: {reward.get('feedback') or 'Processed.'}")
-        
-        time.sleep(2) # Slow down for demo impact
+        if step_resp.status_code != 200:
+            print(f"\n❌ Server error {step_resp.status_code}: {step_resp.text}")
+            break
 
-    # --- Final Result ---
-    result = requests.get(f"{ENV_BASE_URL}/v1/result").json()
-    print("\n" + "🏁" * 30)
-    print("      WAR ROOM CONCLUDED")
-    print("🏁" * 30)
-    print(f"   Final Result: {result.get('summary')}")
-    print(f"   Total Steps:  {result.get('total_steps')}")
-    print(f"   Safety Score: {result.get('final_grader_score'):.4f}")
-    
-    if result.get('final_grader_score') > 0.7:
-        print("\n🏆 BLUE TEAM (DEFENDER) VICTORIOUS")
-    else:
-        print("\n💀 RED TEAM (ATTACKER) BREACHED DEFENSES")
+        resp        = step_resp.json()
+        reward_data = resp.get("reward", {})
+        obs_data    = resp.get("observation")
+        if not obs_data:
+            print("❌ Missing observation in server response.")
+            break
+
+        obs           = Observation.model_validate(obs_data)
+        done          = resp.get("done", False)
+        last_feedback = reward_data.get("feedback", "")
+        reward_val    = max(0.0, min(1.0, float(reward_data.get("value", 0.0))))
+        total_reward += reward_val
+
+        # ── Outcome ───────────────────────────────────────────────────────────
+        bar_filled = int(reward_val * 20)
+        bar        = "█" * bar_filled + "░" * (20 - bar_filled)
+        print(f"\n  💰 OUTCOME")
+        print(f"     Step Reward : [{bar}] {reward_val:.2f}")
+        print(f"     Cumulative  : {total_reward:.2f}")
+        print(f"     Feedback    : {last_feedback or 'Processed.'}")
+
+        if done:
+            print(f"\n  ✅ Environment signalled DONE at step {step}")
+
+        # Save to memory
+        log_text = "\n".join([str(l) for l in obs.logs])
+        memory.save_experience(Experience(
+            state_summary=log_text[:200],
+            action=act_str,
+            target=action_obj.target,
+            reward=reward_val,
+            feedback=last_feedback,
+            reasoning=action_obj.reasoning,
+            success=reward_val > 0.4,
+            timestamp=datetime.now().isoformat(),
+            kill_chain_stage=stage.value
+        ))
+
+        time.sleep(1.2)  # Pacing for readability
+
+    # ── Final Result ──────────────────────────────────────────────────────────
+    print(f"\n{'═' * 62}")
+    print("  🏁  WAR ROOM CONCLUDED")
+    print(f"{'═' * 62}")
+
+    try:
+        result      = requests.get(f"{ENV_BASE_URL}/v1/result").json()
+        final_score = float(result.get("final_grader_score", 0.0))
+        summary     = result.get("summary", "No summary.")
+        total_steps = result.get("total_steps", step)
+
+        print(f"  Final Score : {final_score:.4f}")
+        print(f"  Total Steps : {total_steps}")
+        print(f"  Summary     : {summary}")
+
+        print()
+        if final_score >= 0.80:
+            print("  🏆  BLUE TEAM VICTORY — Network Secured!")
+        elif final_score >= 0.50:
+            print("  ⚠️   PARTIAL DEFENSE — Some threats neutralized.")
+        else:
+            print("  💀  RED TEAM BREACH — Defenses overwhelmed.")
+    except Exception as e:
+        print(f"  ⚠️  Could not fetch final result: {e}")
+
+    print(f"\n  Avg Step Reward : {total_reward / max(step, 1):.3f}")
+    print(f"{'═' * 62}\n")
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="AutoSec War Room Demo")
-    parser.add_argument("--task", type=str, default="task_02", help="The task ID to run (task_01, task_02, task_03)")
+    parser.add_argument(
+        "--task",
+        type=str,
+        default="task_hard",
+        choices=["task_easy", "task_medium", "task_hard"],
+        help="Scenario to simulate"
+    )
     args = parser.parse_args()
-    
     run_war_room(args.task)

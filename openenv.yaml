@@ -1,0 +1,29 @@
+# OpenEnv Manifest
+# ==========================================
+# This file is mandatory for OpenEnv Spec 
+# and defines the environment's metadata.
+
+name: autosec-soc-defender
+version: 1.0.0
+description: "Reinforcement Learning Agent for Autonomous SOC Operations."
+author: "AutoSec Open Source"
+license: MIT
+
+# Configuration for evaluation
+tasks:
+  - id: task_easy
+    name: "L1: Reconnaissance Defense"
+    difficulty: easy
+  - id: task_medium
+    name: "L2: Lateral Movement Containment"
+    difficulty: medium
+  - id: task_hard
+    name: "L3: Data Exfiltration Prevention"
+    difficulty: hard
+
+# Entrypoints
+entrypoint: "api/server.py"
+inference: "inference.py"
+
+# Custom Grader
+grader: "SOCGrader"
