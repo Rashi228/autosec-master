@@ -1,45 +1,51 @@
 # ============================================================
-# AutoSec OpenEnv — Dockerfile
+# AutoSec OpenEnv — Secure Docker Image
 # ============================================================
-# Designed for Hugging Face Spaces (port 7860)
-# Build:  docker build -t autosec-openenv .
-# Run:    docker run -p 7860:7860 autosec-openenv
+# Optimized for high-performance RL inference & stable simulation.
 # ============================================================
 
 FROM python:3.11-slim
 
-# Metadata
-LABEL maintainer="AutoSec OpenEnv"
-LABEL description="Meta OpenEnv-compliant cybersecurity incident response environment"
-LABEL version="1.0.0"
+# System metadata
+LABEL maintainer="AutoSec OpenEnv Team"
+LABEL description="Autonomous SOC Defensive Layer with RL & LLM support"
 
-# Set working directory
+# Set non-interactive install
+ENV DEBIAN_FRONTEND=noninteractive
+ENV PYTHONUNBUFFERED=1
+ENV PYTHONPATH=/app
+
 WORKDIR /app
 
-# Install system deps (minimal)
+# Install critical system utilities
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
+    git \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy and install Python dependencies first (layer caching)
+# Pre-install core ML/RL requirements (for Layer Caching)
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir -r requirements.txt
 
-# Copy application source
+# Copy critical project components
 COPY autosec_openenv/ ./autosec_openenv/
-COPY api/ ./api/
+COPY backend/ ./backend/
+COPY logs/ ./logs/
 COPY inference.py .
+COPY .env .
 
-# Create non-root user (security best practice)
-RUN useradd -m -u 1000 appuser && chown -R appuser:appuser /app
+# Set up dedicated non-root security user
+RUN useradd -m -u 1000 appuser && \
+    chown -R appuser:appuser /app
 USER appuser
 
-# Expose Hugging Face Spaces default port
+# Expose backend API port
 EXPOSE 7860
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+# Hardened health check for the RL Environment
+HEALTHCHECK --interval=20s --timeout=15s --start-period=10s --retries=3 \
     CMD curl -f http://localhost:7860/health || exit 1
 
-# Start the FastAPI server
-CMD ["uvicorn", "api.server:app", "--host", "0.0.0.0", "--port", "7860", "--workers", "1"]
+# Start production-grade FastAPI server with uvicorn
+CMD ["uvicorn", "backend.api.server_rl:app", "--host", "0.0.0.0", "--port", "7860", "--workers", "1"]
