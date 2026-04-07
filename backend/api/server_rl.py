@@ -212,10 +212,12 @@ async def get_state():
         
     return {
         "status": "ACTIVE",
+        "task_id": sim_env.task_info.task_id if hasattr(sim_env, "task_info") else "task_hard",
         "system_state": sim_env.state(),
         "logs": [log.model_dump() for log in sim_env.logs[-10:]],
         "action_history": [a.model_dump() if hasattr(a, 'model_dump') else a for a in sim_env.action_history[-10:]],
         "cumulative_score": sim_env.cumulative_score,
+        "threats_resolved": sim_env.threats_resolved,
         "difficulty": _scheduler.current_difficulty,
         "current_stage": cur_stage,
         "episode_elapsed_s": elapsed,

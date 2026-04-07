@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { 
   Shield, AlertTriangle, Activity, Database, 
-  Terminal, Zap, History, Target, Cpu 
+  Terminal, Zap, History, Target, Cpu, XCircle, CheckCircle2, FlaskConical
 } from 'lucide-react';
-import { getSystemState, resetEnvironment, stepEnvironment } from '../api/client';
+import { getSystemState, resetEnvironment, stepEnvironment, getEpisodeResult } from '../api/client';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area } from 'recharts';
 
 const Dashboard = () => {
@@ -12,16 +12,31 @@ const Dashboard = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
+  // New Control States
+  const [isAutoPilot, setIsAutoPilot] = useState(false);
+  const [selectedTask, setSelectedTask] = useState('task_hard');
+  const [showResultModal, setShowResultModal] = useState(false);
+  const [resultData, setResultData] = useState(null);
+  const [isResetting, setIsResetting] = useState(false);
+
   // Poll for state every 2 seconds
   useEffect(() => {
     const fetchData = async () => {
       try {
         const data = await getSystemState();
-        console.log("DASHBOARD_SYNC_DATA:", data);
         setState(data);
         setError(null);
+        
+        // Sync selected task with server if active
+        if (data.status === 'ACTIVE' && data.task_id) {
+          setSelectedTask(data.task_id);
+        }
+
         if (data.status !== 'INACTIVE' && data.system_state) {
-          setHistory(prev => [...prev.slice(-19), { time: new Date().toLocaleTimeString(), threats: data.system_state.active_threats || 0 }]);
+          setHistory(prev => [...prev.slice(-19), { 
+            time: new Date().toLocaleTimeString(), 
+            threats: data.system_state.active_threats || 0 
+          }]);
         }
         setLoading(false);
       } catch (err) {
@@ -35,13 +50,33 @@ const Dashboard = () => {
     return () => clearInterval(interval);
   }, []);
 
+  // Handle Episode Conclusion (Result Modal)
+  useEffect(() => {
+    if (state?.done && !showResultModal && !resultData) {
+      const fetchResult = async () => {
+        try {
+          const res = await getEpisodeResult();
+          setResultData(res);
+          setShowResultModal(true);
+          setIsAutoPilot(false); // Stop stepping
+        } catch (e) {
+          console.error("Failed to fetch result", e);
+        }
+      };
+      fetchResult();
+    } else if (!state?.done) {
+      // Clear result state when a new episode starts
+      setResultData(null);
+    }
+  }, [state?.done]);
+
   // Autonomous RL stepping interval
   useEffect(() => {
     let active = true;
     const processStep = async () => {
-      if (state?.status === 'ACTIVE' && active) {
+      // ONLY step if Auto-Pilot is ON and environment is ACTIVE and NOT DONE
+      if (state?.status === 'ACTIVE' && isAutoPilot && !state?.done && active) {
         try {
-          // Trigger the RL model to infer and execute a step
           await stepEnvironment({});
         } catch (e) {
           console.error("Step failed", e);
@@ -49,14 +84,25 @@ const Dashboard = () => {
       }
     };
     
-    // The backend executes the model predict logic. 
-    // We tick it every 1.5 seconds.
     const stepInterval = setInterval(processStep, 1500);
     return () => {
        active = false;
        clearInterval(stepInterval);
     };
-  }, [state?.status]);
+  }, [state?.status, isAutoPilot, state?.done]);
+
+  const handleReset = async (taskId) => {
+    setIsResetting(true);
+    try {
+      await resetEnvironment(taskId || selectedTask);
+      setShowResultModal(false);
+      setResultData(null);
+    } catch (e) {
+      console.error("Reset failed", e);
+    } finally {
+      setIsResetting(false);
+    }
+  };
 
   if (error && !state) return (
     <div className="flex flex-col items-center justify-center h-screen bg-soc-bg text-critical gap-4">
@@ -72,6 +118,9 @@ const Dashboard = () => {
   const statusColor = state?.system_state?.status === 'COMPROMISED' ? 'text-critical' : 'text-success';
   const actionHistory = state?.action_history || [];
   const lastAction = actionHistory.length > 0 ? actionHistory[actionHistory.length - 1] : null;
+  const threatsTotal = state?.system_state?.total_threats || 1;
+  const threatsResolved = state?.threats_resolved || 0;
+  const maxSteps = state?.max_steps || state?.system_state?.max_steps || 15;
 
   return (
     <div className="min-h-screen bg-soc-bg text-slate-100 font-sans selection:bg-brand/30">
@@ -87,22 +136,42 @@ const Dashboard = () => {
           </div>
         </div>
         
-        <div className="flex items-center gap-8">
-          <div className="flex items-center gap-4 border-l border-white/5 pl-6">
+        <div className="flex items-center gap-6">
+          {/* Auto-Pilot Toggle */}
+          <div className="flex items-center gap-3 px-4 py-2 bg-white/[0.03] border border-white/5 rounded-xl">
             <div className="text-right">
-              <p className="text-[9px] uppercase font-bold text-slate-500 tracking-widest">Global Status</p>
-              <p className={`text-sm font-black flex items-center gap-2 ${statusColor}`}>
-                <Activity className="w-3 h-3 animate-pulse" />
-                {isInactive ? 'INACTIVE' : (state?.system_state?.status || 'IDLE')}
+              <p className="text-[8px] uppercase font-bold text-slate-500 tracking-widest">Autonomous Driver</p>
+              <p className={`text-[10px] font-black ${isAutoPilot ? 'text-brand' : 'text-slate-400'}`}>
+                {isAutoPilot ? 'AUTO-PILOT ON' : 'MANUAL MODE'}
               </p>
             </div>
+            <button 
+              onClick={() => setIsAutoPilot(!isAutoPilot)}
+              className={`w-10 h-5 rounded-full relative transition-all ${isAutoPilot ? 'bg-brand' : 'bg-slate-700'}`}
+            >
+              <div className={`absolute top-1 w-3 h-3 bg-white rounded-full transition-all ${isAutoPilot ? 'left-6' : 'left-1'}`}></div>
+            </button>
           </div>
-          <button 
-            onClick={() => resetEnvironment('task_02')}
-            className="px-5 py-2 bg-brand text-white font-bold rounded-lg text-xs hover:bg-brand/80 transition-all shadow-lg shadow-brand/20 active:scale-95"
-          >
-            RESET WAR ROOM
-          </button>
+
+          {/* Task Selector & Reset */}
+          <div className="flex items-center gap-2">
+            <select 
+              value={selectedTask}
+              onChange={(e) => setSelectedTask(e.target.value)}
+              className="bg-slate-900 border border-soc-border text-white text-[10px] font-black uppercase rounded-lg px-3 py-2 outline-none focus:border-brand"
+            >
+              <option value="task_easy">L1: Perimeter</option>
+              <option value="task_medium">L2: Lateral</option>
+              <option value="task_hard">L3: Stealth APT</option>
+            </select>
+            <button 
+              onClick={() => handleReset()}
+              disabled={isResetting}
+              className="px-5 py-2 bg-brand text-white font-bold rounded-lg text-xs hover:bg-brand/80 transition-all shadow-lg shadow-brand/20 active:scale-95 disabled:opacity-50"
+            >
+              {isResetting ? 'RESETTING...' : 'RESET WAR ROOM'}
+            </button>
+          </div>
         </div>
       </header>
 
@@ -171,7 +240,9 @@ const Dashboard = () => {
                     <p className="text-4xl font-black font-mono text-white tracking-tighter uppercase">{lastAction.action_type}</p>
                     <div className="flex items-center gap-4 mt-6 pt-4 border-t border-white/5">
                       <div className="flex items-center gap-2"><Target className="w-4 h-4 text-high" /><span className="text-xs font-mono text-slate-300">{lastAction.target}</span></div>
-                      <div className="ml-auto px-3 py-1 bg-brand/20 rounded-full border border-brand/30"><span className="text-[10px] font-black text-brand uppercase tracking-widest">Step {(lastAction.step || 0) + 1}</span></div>
+                      <div className="ml-auto px-3 py-1 bg-brand/20 rounded-full border border-brand/30">
+                        <span className="text-[10px] font-black text-brand uppercase tracking-widest">Step {(lastAction.step || 0) + 1} / {maxSteps}</span>
+                      </div>
                     </div>
                   </div>
                   <div className="space-y-4">
@@ -235,7 +306,7 @@ const Dashboard = () => {
                   <tr><th className="p-2 w-24">TIMESTAMP</th><th className="p-2 w-32">EVENT TYPE</th><th className="p-2 w-28">SOURCE</th><th className="p-2 w-20">SEV</th><th className="p-2">HOSTNAME</th></tr>
                 </thead>
                 <tbody>
-                  {state?.logs?.slice().reverse().map((log, i) => (
+                  {state?.logs?.slice(-20).reverse().map((log, i) => (
                     <tr key={i} className="bg-slate-800/10 hover:bg-slate-800/40 transition-colors">
                       <td className="p-2 text-slate-500 border-l border-white/5">{log.timestamp?.split('T')[1]?.split('.')[0] || '---'}</td>
                       <td className="p-2 text-slate-200 font-bold">{log.event_type}</td>
@@ -274,6 +345,70 @@ const Dashboard = () => {
            </div>
         </div>
       </main>
+
+      {/* Result Modal Overlay */}
+      {showResultModal && resultData && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-soc-bg/90 backdrop-blur-xl animate-in fade-in zoom-in-95 duration-300">
+          <div className="w-full max-w-2xl bg-soc-card border border-soc-border rounded-[2rem] shadow-[0_0_100px_rgba(14,165,233,0.15)] overflow-hidden">
+            <div className="p-8 border-b border-white/5 flex justify-between items-center">
+              <div className="flex items-center gap-4">
+                <div className="p-3 bg-brand/10 rounded-2xl"><CheckCircle2 className="w-8 h-8 text-brand" /></div>
+                <div>
+                  <h2 className="text-2xl font-black text-white tracking-tight uppercase">Episode Concluded</h2>
+                  <p className="text-xs text-slate-500 font-mono font-bold tracking-widest mt-1 uppercase opacity-60">{selectedTask}</p>
+                </div>
+              </div>
+              <button 
+                onClick={() => setShowResultModal(false)}
+                className="p-2 hover:bg-white/5 rounded-full transition-colors text-slate-500"
+              ><XCircle className="w-6 h-6" /></button>
+            </div>
+
+            <div className="p-10">
+              <div className="grid grid-cols-3 gap-8 mb-12">
+                <div className="space-y-2">
+                  <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Final Score</p>
+                  <p className="text-5xl font-black text-white tracking-tighter">{(resultData.final_grader_score * 100).toFixed(0)}<span className="text-brand/50">%</span></p>
+                </div>
+                <div className="space-y-2">
+                  <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Threats Resolved</p>
+                  <p className="text-5xl font-black text-white tracking-tighter">{resultData.telemetry?.threats_resolved || 0}<span className="text-slate-700 text-3xl">/</span><span className="text-slate-600 text-3xl">{resultData.telemetry?.threats_total || 0}</span></p>
+                </div>
+                <div className="space-y-2">
+                  <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Security Level</p>
+                  <p className="text-2xl font-black text-brand uppercase mt-2 tracking-widest">{resultData.telemetry?.difficulty || 'BASIC'}</p>
+                </div>
+              </div>
+
+              <div className="bg-slate-950/50 border border-white/5 rounded-3xl p-8 mb-10">
+                <p className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] mb-6 border-b border-white/5 pb-4">Multi-Persona Evaluation</p>
+                <div className="grid grid-cols-1 gap-6">
+                   {Object.entries(resultData.persona_scores || {}).map(([name, data]) => (
+                     <div key={name} className="flex items-center gap-6">
+                        <div className="w-24 text-[10px] font-black text-slate-400 uppercase tracking-widest">{name}</div>
+                        <div className="flex-1 h-2 bg-white/5 rounded-full overflow-hidden">
+                           <div className="h-full bg-brand transition-all duration-1000" style={{ width: `${(data.score || 0) * 100}%` }}></div>
+                        </div>
+                        <div className="w-12 text-right font-mono text-xs text-brand">{(data.score || 0).toFixed(1)}</div>
+                     </div>
+                   ))}
+                </div>
+              </div>
+
+              <div className="flex gap-4">
+                <button 
+                  onClick={() => handleReset()}
+                  className="flex-1 py-5 bg-brand text-white font-black rounded-2xl text-sm hover:translate-y-[-2px] transition-all shadow-xl shadow-brand/20 active:scale-[0.98] uppercase tracking-widest"
+                >Start New Session</button>
+                <button 
+                  onClick={() => setShowResultModal(false)}
+                  className="flex-1 py-5 bg-white/5 text-slate-300 font-black rounded-2xl text-sm hover:bg-white/10 transition-all uppercase tracking-widest"
+                >Review Simulation</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
