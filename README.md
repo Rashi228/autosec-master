@@ -66,6 +66,7 @@ AutoSec is a **self-teaching SOC agent** that simulates realistic enterprise net
 ┌──────────────────────────────────────────────────────────────────┐
 │              dashboard/ (React 18 + Vite)                        │
 │   Live telemetry · persona traces · action history               │
+│   [NEW] Auto-Pilot Toggle · Task Selector · Result Modal         │
 └──────────────────────────────────────────────────────────────────┘
 ```
 
@@ -205,7 +206,34 @@ Every action is evaluated by three independent SOC expert perspectives:
 
 ---
 
-### 9. 📋 Reproducibility Design
+---
+
+### 9. 🖥️ Professional SOC Dashboard (dashboard/)
+
+The React-based dashboard has been transformed into a robust, multi-mode evaluation center:
+
+#### 🎮 Dual-Control Modes
+| Mode | Toggle | Description |
+|---|---|---|
+| **Auto-Pilot** | **ON** | **Active Driver**: The dashboard automatically triggers `step()` every 1.5s using the RL/LLM brain. |
+| **Manual Mode** | **OFF** | **Passive Observer**: Dashboard only polls for state. Use this when running `inference.py` in a terminal to watch live telemetry without control conflicts. |
+
+#### 🛠️ Dynamic Scenario Selection
+- **Task Selector**: Choose between **L1 (Easy)**, **L2 (Medium)**, or **L3 (Hard)** directly from the UI dropdown.
+- **Auto-Sync**: The dashboard automatically detects if the environment was reset via CLI or API and updates its scenario label to match.
+
+#### 📊 Advanced Telemetry & Feedback
+- **Step Counter**: Real-time progress tracking (e.g., `Step 5 / 15`).
+- **Resolved vs. Total**: Displays specific threat neutralization counts.
+- **Expanded SIEM**: History window increased to the last **20 logs** for better incident investigation.
+- **Episode Conclusion Modal**: A premium overlay appearing at `done: true` that displays:
+    - Final Grader Score (%)
+    - Categorized Threat Resolution counts
+    - Three-Persona score breakdown (Analyst, Hunter, Responder)
+
+---
+
+### 10. 📋 Reproducibility Design
 
 Every component is deterministically seeded:
 
@@ -220,9 +248,9 @@ Every component is deterministically seeded:
 
 ---
 
-### 10. 📡 Evaluation Telemetry
+### 11. 📡 Evaluation Telemetry
 
-Every episode ends with a structured `[TELEMETRY]` block:
+Every episode ends with a structured `[TELEMETRY]` block (in CLI) and a **Result Modal** (in Dashboard):
 
 ```
 [TELEMETRY] TotalSteps=15 | LLM_Calls=5 | LLM_OK=4 (80.0%) | LLM_Fail=1 |
@@ -233,6 +261,7 @@ This enables **evaluation transparency** — every run is auditable:
 - How often LLM was used vs policy
 - Exactly which steps triggered LLM failure/fallback
 - Average and peak reward distribution
+- Persona-based performance trends
 
 ---
 
