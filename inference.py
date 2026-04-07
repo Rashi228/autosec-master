@@ -21,6 +21,7 @@ import random
 import requests
 import logging
 import numpy as np
+import torch
 from typing import List, Optional, Tuple
 from datetime import datetime
 try:
@@ -36,7 +37,7 @@ from autosec_openenv.models import (
     SecurityLog, Severity, EventType
 )
 from autosec_openenv.memory import ExperienceMemory, Experience
-from autosec_openenv.kill_chain import detect_stage
+from autosec_openenv.kill_chain import detect_stage, STAGE_PRIORITY
 
 # ─────────────────────────────────────────────────────────────────────────────
 # MODEL METADATA (Neural Brain Fixed Mappings)
@@ -209,10 +210,11 @@ VALID action_type values (use EXACTLY one):
   BLOCK_IP | ISOLATE_HOST | TERMINATE_PROCESS | MONITOR | NO_ACTION
 
 RULES:
+- A log entry marked [MALICIOUS] IS an active threat. Respond immediately.
 - Target must be an exact IP or hostname from the logs shown.
 - Never repeat a target already in HISTORY.
-- MONITOR/NO_ACTION only if zero active threats.
 - Prefer BLOCK_IP for external IPs, ISOLATE_HOST for internal hosts.
+- MONITOR/NO_ACTION belongs only in pure [benign] log streams.
 
 Respond with ONLY this JSON (no extra text):
 {"action_type": "BLOCK_IP", "target": "<value>", "reasoning": "<one sentence>"}
@@ -233,10 +235,10 @@ def _build_llm_prompt(obs: Observation, feedback: str, history: List[Tuple[str, 
 
     history_str = ", ".join([f"{a}:{t}" for a, t in history[-5:]]) or "none"
 
-    return f"""Threats={obs.num_active_threats} | Step={obs.step_id}
+    return f"""Incident Status: {'ACTIVE ATTACK' if obs.num_active_threats > 0 or any(l.is_malicious for l in obs.logs) else 'CLEAR'}
+Threats={obs.num_active_threats} | Step={obs.step_id}
 Blocked={sys_state.get('blocked_ips',[])} | Isolated={sys_state.get('isolated_hosts',[])}
 History={history_str}
-Feedback={feedback or 'none'}
 Logs:
 {log_lines}"""
 
@@ -327,7 +329,7 @@ def _transform_obs_for_ppo(obs: Observation) -> np.ndarray:
     vec = [
         float(sys_state.get("compromise_level", 0) / 100.0),
         float(obs.num_active_threats / 5.0),
-        float(obs.step_id / 15.0) # Normalized to max steps
+        float(obs.step_id / 30.0) # Matches AutoSecGymEnv normalization
     ]
     
     malicious_hosts = {log.hostname for log in obs.logs if log.is_malicious}
@@ -349,7 +351,7 @@ def _transform_obs_for_ppo(obs: Observation) -> np.ndarray:
 def _try_ppo_action(obs: Observation, history: List[Tuple[str, str]]) -> Optional[dict]:
     """
     Uses the learned PPO brain to predict the next reflexive action.
-    Returns model_dump dict or None.
+    Also calculates a confidence score (mean probability) for routing.
     """
     if not ppo_model:
         return None
@@ -357,6 +359,15 @@ def _try_ppo_action(obs: Observation, history: List[Tuple[str, str]]) -> Optiona
     try:
         vec = _transform_obs_for_ppo(obs)
         action_multi, _states = ppo_model.predict(vec, deterministic=True)
+        
+        # Calculate Confidence (Mean probability across multi-discrete heads)
+        obs_tensor, _ = ppo_model.policy.obs_to_tensor(vec)
+        confidence = 1.0
+        with torch.no_grad():
+            distribution = ppo_model.policy.get_distribution(obs_tensor)
+            # distribution.distribution is a list of Categorical for MultiDiscrete
+            probs = [dist.probs.max().item() for dist in distribution.distribution]
+            confidence = sum(probs) / len(probs)
         
         # Unpack MultiDiscrete [Strategy, Tactic, Target]
         tactic_idx = action_multi[1]
@@ -384,17 +395,22 @@ def _try_ppo_action(obs: Observation, history: List[Tuple[str, str]]) -> Optiona
                 logger.debug(f"🧠 [PPO] Brain predicts BLOCK_IP but can't find IP in logs — falling back.")
                 return None
         
-        # DYNAMIC ALIGNMENT: Auto-correct if PPO confuses BLOCK vs ISOLATE on hosts
-        if a_type == ActionType.BLOCK_IP and target in PPO_HOSTNAMES:
+        # DYNAMIC ALIGNMENT: Auto-correct host/IP mismatches
+        # Only adjust if we actually have malicious log markers to target
+        has_malicious = any(l.is_malicious for l in obs.logs)
+        if has_malicious and a_type == ActionType.BLOCK_IP and target in PPO_HOSTNAMES:
             logger.info(f"🛡️ [PPO_ADJUST] Corrected BLOCK_IP on host {target} to ISOLATE_HOST for accuracy.")
             a_type = ActionType.ISOLATE_HOST
             tactic = "ISOLATE_HOST"
             
-        return Action(
+        action_dict = Action(
             action_type=a_type,
             target=target,
             reasoning=f"Neural Brain Strategy: Reflexive {tactic} on {target} (Pattern Match)."
         ).model_dump()
+        
+        action_dict["confidence"] = confidence
+        return action_dict
     except Exception as e:
         logger.warning(f"PPO inference error: {e}")
         return None
@@ -441,6 +457,19 @@ def _decide_action(
     ppo_action = _try_ppo_action(obs, history)
     if ppo_action:
         act_tup = (ppo_action["action_type"].upper().split(".")[-1], ppo_action["target"])
+        confidence = ppo_action.get("confidence", 1.0)
+        
+        # PPO Confidence Routing: If hesitant, request Strategic Review
+        if confidence < 0.60:
+            logger.info(f"⚠️ [PPO_HESITANT] Confidence {confidence:.2f} < 0.60. Triggering LLM Selective Review...")
+            llm_review = _try_llm_action(obs, feedback, history)
+            if llm_review:
+                rev_tup = (llm_review["action_type"].upper().split(".")[-1], llm_review["target"])
+                if rev_tup in set(history):
+                    logger.info(f"🤖 [LLM_STRATEGIST] Suggested redundant action {rev_tup} — ignoring.")
+                else:
+                    return llm_review, "LLM_STRATEGIST"
+
         if act_tup in set(history):
             logger.info(f"🧠 [PPO] Neural reflex suggests redundant action {act_tup} — ignoring.")
         else:
@@ -511,10 +540,40 @@ def run_episode(task_id: str = "task_hard") -> Optional[dict]:
             act_str = str(action["action_type"]).split(".")[-1].upper()
             action_history.append((act_str, action["target"]))
 
+            # Anti-Overreaction Guard: Critical Asset Isolation Protection
+            is_over_isolation = False
+            critical_assets = ["dc-01", "db-server-01", "web-prod-01"]
+            if act_str == "ISOLATE_HOST" and action["target"] in critical_assets:
+                current_killchain = detect_stage(obs.logs)
+                priority = STAGE_PRIORITY.get(current_killchain, 0)
+                # Block if very early (Recon/Initial Access), penalize if Lateral
+                if priority < 4:
+                    is_over_isolation = True
+                    if priority < 2:
+                        logger.warning(f"🛡️ [OVERREACTION_GUARD] Blocking premature isolation of {action['target']} at {current_killchain} stage.")
+                        # Force fallback to POLICY for safety
+                        action_obj = _smart_policy(obs, action_history)
+                        action = action_obj.model_dump()
+                        act_str = str(action["action_type"]).split(".")[-1].upper()
+                        source = "POLICY_GUARD"
+
+            # Action Validation Layer (Non-breaking alignment check)
+            is_ip_mismatch = False
+            target = action["target"]
+            is_ip = "." in target or (target and target[0].isdigit())
+            if act_str == "BLOCK_IP" and not is_ip:
+                is_ip_mismatch = True
+            elif act_str == "ISOLATE_HOST" and is_ip:
+                is_ip_mismatch = True
+
             # Execute step
             step_resp = requests.post(
                 f"{ENV_BASE_URL}/v1/step",
-                json={"action": action}
+                json={
+                    "action": action,
+                    "is_ip_mismatch": is_ip_mismatch,
+                    "is_over_isolation": is_over_isolation
+                }
             ).json()
 
             if step_resp.get("error"):
@@ -536,11 +595,15 @@ def run_episode(task_id: str = "task_hard") -> Optional[dict]:
 
             # [STEP] — Show full explainability: What, Where, and WHY
             reasoning = action.get("reasoning", "No explanation.")
+            ppo_confidence = action.get("confidence")
+            
             print(
-                f"[STEP] Step: {step:02d} | Source: {source:<6} | "
+                f"[STEP] Step: {step:02d} | Source: {source:<10} | "
                 f"Action: {act_str:<20} | Target: {action['target']:<22} | "
                 f"Reward: {reward_val:.2f}"
             )
+            if ppo_confidence is not None:
+                print(f"       ↳ PPO_CONFIDENCE: {ppo_confidence:.2f}")
             print(f"       ↳ EXPLAIN: {reasoning}")
 
             # Persist to memory

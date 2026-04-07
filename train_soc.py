@@ -17,30 +17,39 @@ try:
 except ImportError:
     HAS_RL = False
 
-from autosec_openenv.gym_wrapper import make_env
+from backend.rl.env_wrapper import AutoSecGymEnv
 
-def train_agent(task_id: str = "task_01", total_timesteps: int = 20000):
+def train_agent(task_id: str = "task_easy", total_timesteps: int = 30000):
     """
-    Trains a PPO agent on the specified SOC task.
+    Trains a PPO agent on a mixture of SOC tasks for robust generalization.
     """
     if not HAS_RL:
         print("❌ Error: 'stable-baselines3' not found. Please install it to run RL training.")
         return
 
-    print(f"[*] Training PPO SOC Agent on {task_id} for {total_timesteps} steps...")
+    print(f"[*] Starting Multi-Task Tactical Training for {total_timesteps} steps...")
+    print(f"[*] Diversifying data: [1x Easy, 1x Medium, 2x Hard] parallel streams.")
     
-    # 1. Create Vectorized Environment
-    env = make_vec_env(lambda: make_env(task_id), n_envs=4)
+    # 1. Create Vectorized Environment with Scenario Diversification
+    from stable_baselines3.common.vec_env import DummyVecEnv
+
+    def make_env_fn(t_id):
+        return lambda: AutoSecGymEnv(task_id=t_id)
+
+    # Strategic Mix: 1x Easy, 1x Medium, 2x Hard parallel streams
+    tasks = ["task_easy", "task_medium", "task_hard", "task_hard"]
+    env_fns = [make_env_fn(t) for t in tasks]
+    env = DummyVecEnv(env_fns)
     
     # 2. Initialize PPO Model
     model = PPO(
         "MlpPolicy", 
         env, 
         verbose=1, 
-        learning_rate=3e-4, 
-        n_steps=512,
-        batch_size=64,
-        tensorboard_log="./soc_training_logs/"
+        learning_rate=2e-4, 
+        n_steps=1024,
+        batch_size=128,
+        gamma=0.99
     )
     
     # 3. Train
