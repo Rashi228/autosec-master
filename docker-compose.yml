@@ -1,44 +1,59 @@
-version: "3.9"
-
 services:
-  autosec-env:
+  autosec-rl-env:
     build:
       context: .
       dockerfile: Dockerfile
-    image: autosec-openenv:latest
-    container_name: autosec_openenv
+    image: autosec-rl-env:latest
+    container_name: autosec_env_main
     ports:
       - "7860:7860"
     environment:
+      # Use localhost for host machine access, or service name within net
       - ENV_BASE_URL=http://localhost:7860
+      - PYTHONUNBUFFERED=1
     volumes:
-      # Mount source for live reload during development
+      # Live-sync backend and simulation for hot-patching
+      - ./backend:/app/backend:ro
       - ./autosec_openenv:/app/autosec_openenv:ro
-      - ./api:/app/api:ro
+      - ./logs:/app/logs:rw
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:7860/health"]
-      interval: 30s
+      test: [ "CMD", "curl", "-f", "http://localhost:7860/health" ]
+      interval: 15s
       timeout: 10s
       retries: 3
-      start_period: 10s
+      start_period: 20s
 
-  # Optional: run inference against the containerized environment
-  inference:
+  # Dedicated Inference Container for CLI evaluation
+  inference-agent:
     build:
       context: .
       dockerfile: Dockerfile
-    image: autosec-openenv:latest
-    container_name: autosec_inference
+    image: autosec-rl-env:latest
+    container_name: autosec_inference_agent
     depends_on:
-      autosec-env:
+      autosec-rl-env:
         condition: service_healthy
+    env_file:
+      - .env
     environment:
-      - ENV_BASE_URL=http://autosec-env:7860
-      - API_BASE_URL=${API_BASE_URL:-https://api.openai.com/v1}
-      - MODEL_NAME=${MODEL_NAME:-gpt-4o-mini}
-      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
-      - HF_TOKEN=${HF_TOKEN:-}
-    command: ["python", "inference.py"]
+      # Connect to the sibling env container
+      - ENV_BASE_URL=http://autosec-rl-env:7860
+    command: [ "python", "inference.py" ]
     profiles:
-      - inference   # Only runs when: docker compose --profile inference up
+      - eval # Run: docker compose --profile eval up
+
+  # Optional: Monitoring Dashboard
+  dashboard:
+    image: node:18-slim
+    container_name: autosec_dashboard
+    working_dir: /app
+    volumes:
+      - ./dashboard:/app
+    ports:
+      - "5173:5173"
+    environment:
+      - VITE_API_URL=http://localhost:7860
+    command: [ "npm", "run", "dev", "--", "--host", "0.0.0.0" ]
+    profiles:
+      - ui # Run: docker compose --profile ui up

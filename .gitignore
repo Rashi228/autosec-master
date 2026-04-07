@@ -61,3 +61,19 @@ desktop.ini
 .project
 .pydevproject
 .settings/
+
+# AI: Neural Weights & Model Bundles (Large Binary Files)
+*.zip
+*.pth
+*.h5
+*.onnx
+
+# Assistant: Antigravity & Agent Metadata
+.gemini/
+.workspace/
+.agents/
+
+# Docker: Local Overrides & Exported Images
+docker-compose.override.yml
+*.tar
+*.tar.gz
