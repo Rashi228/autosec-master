@@ -22,4 +22,9 @@ export const stepEnvironment = async (action) => {
   return response.data;
 };
 
+export const getEpisodeResult = async () => {
+  const response = await apiClient.get('/v1/result');
+  return response.data;
+};
+
 export default apiClient;
