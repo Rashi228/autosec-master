@@ -165,10 +165,15 @@ async def step(payload: Dict[str, Any] = Body(default={})):
             print(f"Memory error: {mem_e}")
 
         # Record history for frontend
+        p_scores = [p["score"] for p in persona_feedback["personas"].values() if "score" in p]
+        confidence = sum(p_scores) / len(p_scores) if p_scores else 0.5
+        
         action_dict = action_obj.model_dump()
         action_dict.update({
             "persona_evaluations": persona_feedback["personas"],
-            "step_score": float(reward)
+            "step_score": float(reward),
+            "step": sim_env.step_id,
+            "confidence": round(float(confidence), 4)
         })
         sim_env.action_history.append(action_dict)
         
