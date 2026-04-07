@@ -16,26 +16,32 @@ from dotenv import load_dotenv
 from autosec_openenv.models import (
     SystemState, Observation, Action, ActionType, 
     SecurityLog, Severity, EventType, SystemStatus,
-    EpisodeResult, AttackAction
+    EpisodeResult, AttackAction, Reward
 )
+from backend.rl.reward_engine import calculate_reward
 from autosec_openenv.log_generator import generate_malicious_log, generate_benign_logs
+from autosec_openenv.graders import SOCGrader
+from autosec_openenv.task_manager import load_scenario
 
 class SimulationEnvironment:
     """
     Main simulation engine for AutoSec OpenEnv.
     """
 
-    def __init__(self, task_id: str = "task_01"):
+    def __init__(self, task_id: str = "task_easy", seed: int = 42):
         load_dotenv()
+        self.scenario = load_scenario(task_id)
         self.task_id = task_id
         self.step_id = 0
         self.done = False
+        # Fix random seed for reproducibility
+        random.seed(seed)
         
-        # Pull global safety cap from environment
-        self.max_steps = int(os.getenv("MAX_STEPS", 10))
+        # Max steps from scenario
+        self.max_steps = self.scenario.max_steps
         
         # Core State
-        self.state = SystemState(
+        self.state_obj = SystemState(
             status=SystemStatus.NORMAL,
             compromise_level=0.0,
             active_threats=0,
@@ -44,22 +50,29 @@ class SimulationEnvironment:
             reset_users=[]
         )
         
-        # Log History
+        # Log History & Buffers
         self.logs: List[SecurityLog] = []
-        self.action_history: List[Dict[str, Any]] = []
+        self.delayed_logs: List[SecurityLog] = [] # For task_medium
+        self.action_history: List[Action] = []
         self.last_attacker_action: Optional[Dict[str, Any]] = None
         self.cumulative_score = 0.0
-        self.threat_capacity = 3 # Dynamic limit for curriculum learning
+        self.threat_capacity = 3
+        
+        # Metrics for Grader
+        self.threats_resolved = 0
+        self.threats_total = 0
+        self.errors = 0
 
-        # Network Topology (Simulated)
+        # Network Topology
         self.hosts = ["web-prod-01", "db-server-01", "dc-01", "hr-laptop-12", "dev-pc-04"]
         self.internal_ips = {h: f"10.0.0.{i+10}" for i, h in enumerate(self.hosts)}
+        self.grader = SOCGrader(task_id)
 
-    def reset(self) -> Observation:
+    def reset(self) -> tuple[Observation, dict]:
         """Resets the environment to initial state."""
         self.step_id = 0
         self.done = False
-        self.state = SystemState()
+        self.state_obj = SystemState()
         self.logs = []
         self.action_history = []
         self.last_attacker_action = None
@@ -68,78 +81,119 @@ class SimulationEnvironment:
         # Initial Benign Activity
         self._generate_benign_logs(count=3)
         
-        return self._build_observation()
+        return self._build_observation(), {}
 
-    def step(self, action: Action) -> (Observation, Dict[str, Any]):
+    def step(self, action: Action) -> tuple[Observation, Reward, bool, dict]:
         """Executes one simulation step."""
         self.step_id += 1
+        self.action_history.append(action)
         
         # 1. Apply Defender Action
         reward_info = self._apply_defender_action(action)
         
         # 2. Check for Termination (Global safety cap)
-        if self.step_id >= self.max_steps or self.state.compromise_level >= 100:
+        if self.step_id >= self.max_steps:
+            self.done = True
+            # Penalty for timeout if threats remain
+            if self.state_obj.active_threats > 0:
+                reward_info["score"] -= 0.3
+        
+        if self.state_obj.compromise_level >= 100:
             self.done = True
             
         # 3. Attacker's Turn (if not done)
         if not self.done:
             self._execute_attacker_turn()
             
-        # 4. Generate Observation
+        # 4. Process Task-Specific Side Effects
+        self._process_side_effects()
+
+        # 5. Generate Observation
         obs = self._build_observation()
         
-        return obs, reward_info
+        # 6. Build Reward Object
+        reward_obj = Reward(
+            value=max(0.0, min(1.0, reward_info["score"])),
+            feedback=reward_info["feedback"],
+            is_terminal=self.done
+        )
+        
+        return obs, reward_obj, self.done, reward_info
+
+    def _process_side_effects(self):
+        """Task-specific structural differences."""
+        # Task Medium: Release delayed logs from buffer
+        if self.task_id == "task_medium" and self.delayed_logs:
+            # Simple 1-step delay: release everything that was added in previous steps
+            self.logs.extend(self.delayed_logs)
+            self.delayed_logs = []
+
+    def state(self) -> dict:
+        """Returns the full environment state."""
+        return self.state_obj.model_dump()
 
     def _apply_defender_action(self, action: Action) -> Dict[str, Any]:
         """Calculates reward and updates state based on defender move."""
-        score = 0.0
-        feedback = ""
+        step_info = {
+            "redundant": False,
+            "unsafe": False,
+            "is_correct_target": False,
+            "resolved_threat": False
+        }
         
         target = action.target
         a_type = action.action_type
         
-        # Redundancy Check (Penalty)
-        if a_type == ActionType.BLOCK_IP and target in self.state.blocked_ips:
-            score -= 0.2
-            feedback = f"Redundant block: {target} is already blocked."
-        elif a_type == ActionType.ISOLATE_HOST and target in self.state.isolated_hosts:
-            score -= 0.2
-            feedback = f"Redundant isolation: {target} is already isolated."
-        elif a_type == ActionType.NO_ACTION and self.state.active_threats > 0:
-            score -= 0.5
-            feedback = f"Failure to act while {self.state.active_threats} threats remain."
-        else:
-            # Valid Action Logic
-            if a_type == ActionType.BLOCK_IP:
-                self.state.blocked_ips.append(target)
-                score += 0.4
-                feedback = f"Successfully blocked IP {target}."
-            elif a_type == ActionType.ISOLATE_HOST:
-                self.state.isolated_hosts.append(target)
-                score += 0.4
-                feedback = f"Successfully isolated host {target}."
-            elif a_type == ActionType.NO_ACTION:
-                score += 0.1
-                feedback = "Maintenance step."
-                
-        # Update threats resolved (simplified)
-        if score > 0:
-            self.state.active_threats = max(0, self.state.active_threats - 1)
+        # Heuristic Logic for step_info — redundancy only affects reward, NOT grader errors
+        if a_type == ActionType.BLOCK_IP and target in self.state_obj.blocked_ips:
+            step_info["redundant"] = True
+        elif a_type == ActionType.ISOLATE_HOST and target in self.state_obj.isolated_hosts:
+            step_info["redundant"] = True
         
+        # Check if target is actually malicious (includes TERMINATE_PROCESS)
+        malicious_sources = [log.source_ip for log in self.logs if log.is_malicious]
+        malicious_hosts   = [log.hostname  for log in self.logs if log.is_malicious]
+        
+        is_correct = (
+            (a_type == ActionType.BLOCK_IP         and target in malicious_sources) or
+            (a_type == ActionType.ISOLATE_HOST     and target in malicious_hosts)   or
+            (a_type == ActionType.TERMINATE_PROCESS and target in malicious_hosts)
+        )
+        
+        if is_correct and not step_info["redundant"]:
+            # Novel correct action — resolve one active threat
+            step_info["is_correct_target"] = True
+            step_info["resolved_threat"]   = True
+            self.state_obj.active_threats  = max(0, self.state_obj.active_threats - 1)
+            self.threats_resolved = min(self.threats_total, self.threats_resolved + 1)
+        elif not is_correct and a_type not in [ActionType.NO_ACTION, ActionType.MONITOR]:
+            # Genuinely wrong target (not redundant, not malicious) — grader error
+            if not step_info["redundant"]:
+                self.errors += 1
+
+        # Apply state changes
+        if a_type == ActionType.BLOCK_IP:
+            self.state_obj.blocked_ips.append(target)
+        elif a_type == ActionType.ISOLATE_HOST:
+            self.state_obj.isolated_hosts.append(target)
+                
+        # Calculate Reward using unified engine
+        score = calculate_reward(action, self.state_obj, step_info)
         self.cumulative_score += score
+        
         return {
             "score": score, 
             "cumulative_score": self.cumulative_score, 
-            "feedback": feedback, 
+            "feedback": f"Action {a_type} on {target} processed.", 
             "done": self.done
         }
 
     def _execute_attacker_turn(self):
         """Simulates an adversarial move."""
         # Simple heuristic attacker
-        if self.state.active_threats < self.threat_capacity:
+        if self.state_obj.active_threats < self.threat_capacity:
             target_host = random.choice(self.hosts)
-            if target_host not in self.state.isolated_hosts:
+            if target_host not in self.state_obj.isolated_hosts:
                 attack_type = "LATERAL_MOVEMENT" if self.step_id > 2 else "BRUTE_FORCE"
                 self.last_attacker_action = {
                     "attack_type": attack_type,
@@ -151,32 +205,57 @@ class SimulationEnvironment:
                 # Use reconstructed log generator
                 attack_obj = AttackAction(**self.last_attacker_action)
                 log = generate_malicious_log(attack_obj, self.step_id)
-                self.logs.append(log)
-                self.state.active_threats += 1
+                
+                # Structural Difference: Stealth
+                is_stealthy = False
+                if self.task_id == "task_hard" and random.random() < 0.5:
+                    is_stealthy = True
+                
+                if not is_stealthy:
+                    # Structural Difference: Delay
+                    if self.task_id == "task_medium":
+                        self.delayed_logs.append(log)
+                    else:
+                        self.logs.append(log)
+                
+                self.state_obj.active_threats += 1
+                self.threats_total += 1
 
     def _generate_benign_logs(self, count: int = 1):
         logs = generate_benign_logs(self.hosts, self.internal_ips, count)
         self.logs.extend(logs)
 
     def _build_observation(self) -> Observation:
-        # Show only recent logs (sliding window)
-        visible_logs = self.logs[-5:]
+        # Expand log window so agent sees more context
+        visible_logs = self.logs[-10:]
+        
+        # Calculate Structured Features (CRITICAL for RL)
+        severity_map = {"LOW": 1, "MEDIUM": 2, "HIGH": 3, "CRITICAL": 5}
+        total_sev = sum(
+            severity_map.get(str(l.severity).upper().split(".")[-1], 0)
+            for l in visible_logs if l.is_malicious
+        )
+        impact = min(1.0, (self.state_obj.compromise_level / 50.0) + (self.state_obj.active_threats * 0.2))
+
         return Observation(
             step_id=self.step_id,
             task_id=self.task_id,
             logs=visible_logs,
-            system_state=self.state,
-            done=self.done
+            system_state=self.state_obj.model_dump(),
+            num_active_threats=self.state_obj.active_threats,
+            threat_severity_sum=total_sev,
+            recent_event_types=[l.event_type.value for l in visible_logs][-3:],
+            impact_score=float(impact)
         )
 
     def get_result(self) -> EpisodeResult:
-        return EpisodeResult(
-            task_id=self.task_id,
+        return self.grader.get_episode_result(
+            final_state_obj=self.state_obj,
             total_steps=self.step_id,
-            final_grader_score=0.85 if self.state.active_threats == 0 else 0.3,
             cumulative_reward=self.cumulative_score,
-            threats_resolved=5,
-            threats_total=5,
-            false_positives=0,
-            summary=f"Simulation ended at step {self.step_id}."
+            threats_resolved=self.threats_resolved,
+            threats_total=max(self.threats_total, 1),
+            errors=self.errors,
+            action_history=self.action_history,
+            logs=self.logs
         )

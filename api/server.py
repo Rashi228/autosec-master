@@ -40,8 +40,11 @@ async def reset(req: ResetRequest = Body(...)):
     """Reset the simulation environment."""
     global _env
     _env = SimulationEnvironment(task_id=req.task_id)
-    obs = _env.reset()
-    return {"observation": obs.model_dump()}
+    obs, info = _env.reset()
+    return {
+        "observation": obs.model_dump(),
+        "info": info
+    }
 
 @app.post("/v1/step")
 async def step(payload: Dict[str, Any] = Body(...)):
@@ -56,11 +59,13 @@ async def step(payload: Dict[str, Any] = Body(...)):
             raise HTTPException(status_code=400, detail="Missing 'action' in payload.")
             
         action = Action(**action_data)
-        obs, reward_info = _env.step(action)
+        obs, reward_obj, done, info = _env.step(action)
         
         return {
             "observation": obs.model_dump(),
-            "reward": reward_info
+            "reward": reward_obj.model_dump(),
+            "done": done,
+            "info": info
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Step failed: {str(e)}")
@@ -74,7 +79,7 @@ async def get_state():
     
     # Return structure compatible with the Dashboard's expectations
     return {
-        "system_state": _env.state.model_dump(),
+        "system_state": _env.state(),
         "logs": [log.model_dump() for log in _env.logs[-10:]], # Latest 10 logs
         "last_attacker_action": _env.last_attacker_action,
         "step_id": _env.step_id

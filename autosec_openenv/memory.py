@@ -57,8 +57,18 @@ class ExperienceMemory:
     def save_experience(self, exp: Experience):
         """Add a new experience and persist to disk (with absolute path)."""
         self.memory.append(exp)
-        if len(self.memory) > 100:
-            self.memory = self.memory[-100:]
+        if len(self.memory) > 500:  # Expanded from 100 to 500
+            # Keep the best 400 experiences (by reward) + last 100 recent
+            successful = sorted([m for m in self.memory if m.success], key=lambda x: x.reward, reverse=True)[:300]
+            recent = self.memory[-100:]
+            seen = set()
+            merged = []
+            for m in successful + recent:
+                key = (m.action, m.target, m.kill_chain_stage)
+                if key not in seen:
+                    seen.add(key)
+                    merged.append(m)
+            self.memory = merged[-400:]
             
         try:
             # Use absolute path to avoid directory confusion
