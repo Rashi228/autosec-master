@@ -44,11 +44,11 @@ def run_war_room(task_id: str):
     print("      Blue Team (Defender) vs Red Team (Attacker)")
     print("═" * 62 + "\n")
 
-    # Import the hybrid decision system from inference.py
+    # Import the high-performance hybrid decision system from inference.py
     try:
-        from inference import _smart_policy, _try_llm_action, LLM_CALL_INTERVAL
+        from inference import _decide_action, ppo_model
     except ImportError as e:
-        print(f"❌ Could not import inference.py: {e}")
+        print(f"❌ Could not import brain from inference.py: {e}")
         sys.exit(1)
 
     # Reset environment
@@ -69,6 +69,15 @@ def run_war_room(task_id: str):
     last_feedback  = ""
     action_history = []
     total_reward   = 0.0
+    telemetry = {
+        "llm_attempts":  0,
+        "llm_successes": 0,
+        "llm_failures":  0,
+        "fallback_steps": [],
+        "ppo_steps":     [],
+        "policy_steps":  [],
+        "rewards":       [],
+    }
 
     # ── Episode Loop ──────────────────────────────────────────────────────────
     while not done and step < MAX_STEPS:
@@ -101,32 +110,31 @@ def run_war_room(task_id: str):
             flag   = "⚠ MALICIOUS" if log.is_malicious else "  benign "
             print(f"     {icon} {flag} | {str(log.event_type):<28} | src={log.source_ip or 'internal'}")
 
-        # ── Blue Team Decision ────────────────────────────────────────────────
+        # ── Blue Team Decision (Triple Hybrid Brain) ─────────────────────────
         print(f"\n  🔵 BLUE TEAM ANALYZING...")
-        time.sleep(0.4)  # Dramatic pause
+        time.sleep(0.6)  # Cinematic pause
 
-        use_llm = (step % LLM_CALL_INTERVAL == 0)
-        source  = "POLICY"
-        action_obj = None
+        action_dict, source_id = _decide_action(step, obs, last_feedback, action_history, telemetry)
 
-        if use_llm:
-            action_dict = _try_llm_action(obs, last_feedback, action_history)
-            if action_dict:
-                source     = "LLM 🧠"
-                action_obj = Action.model_validate(action_dict)
+        # Mapping for War Room Icons
+        source_map = {
+            "LLM":    "LLM 🧠",
+            "PPO":    "PPO 🤖",
+            "POLICY": "POLICY ⚙️"
+        }
+        source_label = source_map.get(str(source_id).upper(), source_id)
+        
+        act_str = str(action_dict["action_type"]).split(".")[-1].upper()
+        target  = action_dict["target"]
+        reason  = action_dict.get("reasoning", "Executing defensive maneuver.")
 
-        if action_obj is None:
-            action_obj = _smart_policy(obs, action_history)
-            source     = "POLICY ⚙️"
+        # Track history for the brain's internal redundancy checks
+        action_history.append((act_str, target))
 
-        action_dict = action_obj.model_dump()
-        act_str     = str(action_obj.action_type).split(".")[-1].upper()
-        action_history.append((act_str, action_obj.target))
-
-        print(f"     Source    : {source}")
+        print(f"     Source    : {source_label}")
         print(f"     Decision  : {act_str}")
-        print(f"     Target    : {action_obj.target}")
-        print(f"     Reasoning : {action_obj.reasoning}")
+        print(f"     Target    : {target}")
+        print(f"     Reasoning : {reason}")
 
         # ── Submit Action ─────────────────────────────────────────────────────
         step_resp = requests.post(
@@ -162,15 +170,15 @@ def run_war_room(task_id: str):
         if done:
             print(f"\n  ✅ Environment signalled DONE at step {step}")
 
-        # Save to memory
+        # Save to memory (New Synced Variables)
         log_text = "\n".join([str(l) for l in obs.logs])
         memory.save_experience(Experience(
             state_summary=log_text[:200],
             action=act_str,
-            target=action_obj.target,
+            target=target,
             reward=reward_val,
             feedback=last_feedback,
-            reasoning=action_obj.reasoning,
+            reasoning=reason,
             success=reward_val > 0.4,
             timestamp=datetime.now().isoformat(),
             kill_chain_stage=stage.value
