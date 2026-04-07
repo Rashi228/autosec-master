@@ -7,11 +7,12 @@ vector memory endpoints, curriculum difficulty, and explanations.
 
 from fastapi import FastAPI, HTTPException, Body
 from fastapi.middleware.cors import CORSMiddleware
-from typing import Dict, Any
+from typing import Dict, Any, List
 import os
 import time
 
-from autosec_openenv.models import Action
+from autosec_openenv.models import Action, ActionType
+from backend.rl.reward_engine import calculate_reward
 from backend.evaluator.personas import MultiPersonaEvaluator
 from backend.rl.explainability import generate_action_explanation
 from backend.curriculum.scheduler import CurriculumScheduler
@@ -94,6 +95,9 @@ async def step(payload: Dict[str, Any] = Body(default={})):
         
         # 1. Action Selection: External Pilot vs internal RL
         client_action_data = payload.get("action")
+        is_ip_mismatch = payload.get("is_ip_mismatch", False)
+        is_over_isolation = payload.get("is_over_isolation", False)
+        
         if client_action_data:
             print("[STEP] External Pilot Action Received.")
             from autosec_openenv.models import ActionType, Action
@@ -101,18 +105,57 @@ async def step(payload: Dict[str, Any] = Body(default={})):
             # Map client dictionary to Action object
             atype_str = client_action_data.get("action_type", "NO_ACTION")
             if "." in atype_str: atype_str = atype_str.split(".")[-1]
+            target = client_action_data.get("target", "none")
             
             action_obj = Action(
                 action_type=ActionType(atype_str),
-                target=client_action_data.get("target", "none"),
+                target=target,
                 strategy=client_action_data.get("strategy", "DETECT"),
-                tactic=client_action_data.get("tactic", "MONITOR"),
+                tactic=client_action_data.get("tactic", "NO_ACTION"),
                 reasoning=client_action_data.get("reasoning", "Client Pilot Action")
             )
             
-            # Execute directly on simulation to bypass internal model prediction
+            # Capture Malicious context BEFORE the step (successful blocks erase logs)
+            malicious_sources_pre = {str(log.source_ip).strip() for log in _env_wrapper.sim.logs if log.is_malicious}
+            malicious_hosts_pre = {str(log.hostname).strip() for log in _env_wrapper.sim.logs if log.is_malicious}
+
+            # Execute directly on simulation
+            pre_threats = _env_wrapper.sim.state_obj.active_threats
             obs_obj, reward_obj, done, info_sim = _env_wrapper.sim.step(action_obj)
-            reward = float(reward_obj.value if hasattr(reward_obj, 'value') else 0.0)
+            post_threats = _env_wrapper.sim.state_obj.active_threats
+            
+            # Robust mapping for IPs and Hostnames using PRE-STEP context
+            clean_target = str(target).strip()
+            is_correct_target = (clean_target in malicious_hosts_pre) or (clean_target in malicious_sources_pre)
+            
+            # 2. IP vs Host Mismatch Detection
+            is_ip = "." in target or (target and target[0].isdigit())
+            is_ip_mismatch = False
+            a_type = action_obj.action_type
+            if a_type == ActionType.BLOCK_IP and not is_ip:
+                is_ip_mismatch = True
+            elif a_type == ActionType.ISOLATE_HOST and is_ip:
+                is_ip_mismatch = True
+            
+            # 3. Correct Action Type logic
+            has_threat = _env_wrapper.sim.state_obj.active_threats > 0 or len(malicious_sources_pre) > 0
+            is_correct_action_type = (has_threat and a_type in [ActionType.BLOCK_IP, ActionType.ISOLATE_HOST])
+            if not has_threat and a_type in [ActionType.MONITOR, ActionType.NO_ACTION]:
+                is_correct_action_type = True
+
+            print(f"[REWARD_DEBUG] Target: '{clean_target}' | Correct: {is_correct_target} | ActionMatch: {is_correct_action_type}")
+            
+            step_info = {
+                "resolved_threat": post_threats < pre_threats,
+                "is_correct_target": is_correct_target,
+                "is_correct_action_type": is_correct_action_type,
+                "is_ip_mismatch": is_ip_mismatch,
+                "is_over_isolation": is_over_isolation,
+                "is_repeated": False
+            }
+            
+            # Override standard simulation reward with stabilized RL reward
+            reward = calculate_reward(action_obj, _env_wrapper.sim.state_obj, step_info)
             
             # Synchronize the internal RL vector for future predictions
             _current_obs = _env_wrapper._transform_obs(obs_obj)
@@ -120,7 +163,7 @@ async def step(payload: Dict[str, Any] = Body(default={})):
             # Populate info dictionary for compliance
             info = {
                 "pydantic_obs": obs_obj,
-                "pydantic_reward": reward_obj,
+                "pydantic_reward": {"value": reward, "feedback": info_sim.get("feedback", "")},
                 "sim_info": info_sim
             }
         else:
@@ -184,10 +227,15 @@ async def step(payload: Dict[str, Any] = Body(default={})):
         pydantic_obs = info["pydantic_obs"]
         pydantic_reward = info["pydantic_reward"]
         
-        print("[STEP] Success.")
+        # Standardize reward output (handle both dict and Pydantic model)
+        reward_out = pydantic_reward
+        if hasattr(pydantic_reward, "model_dump"):
+            reward_out = pydantic_reward.model_dump()
+            
+        print(f"[STEP] Success. Reward: {reward_out.get('value', 0.0)}")
         return {
             "observation": pydantic_obs.model_dump(),
-            "reward": pydantic_reward.model_dump(),
+            "reward": reward_out,
             "done": bool(done),
             "info": {
                 "difficulty": str(_scheduler.current_difficulty),

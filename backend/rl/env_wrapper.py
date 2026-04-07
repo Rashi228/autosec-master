@@ -11,6 +11,7 @@ import numpy as np
 
 from autosec_openenv.env import SimulationEnvironment
 from autosec_openenv.models import ActionType, Action
+from autosec_openenv.kill_chain import detect_stage, KillChainStage, STAGE_PRIORITY
 from backend.rl.reward_engine import calculate_reward
 
 # Simplified action mapping for RL representation
@@ -88,6 +89,34 @@ class AutoSecGymEnv(gym.Env):
         obs_obj, reward_obj, done, sim_reward_info = self.sim.step(action)
         post_threats = self.sim.state_obj.active_threats
         
+        # 1. Detect Kill Chain Stage
+        current_stage = detect_stage(self.sim.logs)
+        priority = STAGE_PRIORITY.get(current_stage, 0)
+        
+        # 2. IP vs Host Mismatch Detection
+        is_ip = "." in target or (target and target[0].isdigit())
+        is_ip_mismatch = False
+        if a_type == ActionType.BLOCK_IP and not is_ip:
+            is_ip_mismatch = True
+        elif a_type == ActionType.ISOLATE_HOST and is_ip:
+            is_ip_mismatch = True
+            
+        # 3. Over-isolation Detection (Critical Assets)
+        critical_assets = ["dc-01", "db-server-01", "web-prod-01"]
+        is_over_isolation = False
+        if a_type == ActionType.ISOLATE_HOST and target in critical_assets:
+            # Penalty if stage < PRIVILEGE_ESCALATION (Priority 4)
+            if priority < 4:
+                is_over_isolation = True
+                
+        # 4. Correct Action Type Detection
+        is_correct_action_type = False
+        if priority >= 1: # Some threat exists
+            if a_type in [ActionType.BLOCK_IP, ActionType.ISOLATE_HOST]:
+                is_correct_action_type = True
+        elif a_type == ActionType.MONITOR:
+            is_correct_action_type = True
+
         # Calculate custom RL reward
         action_key = (str(action.action_type), action.target)
         is_novel = action_key not in self._seen_action_targets
@@ -97,6 +126,9 @@ class AutoSecGymEnv(gym.Env):
             "resolved_threat": post_threats < pre_threats,
             "threat_reduced": post_threats < pre_threats,
             "is_correct_target": is_correct_target,
+            "is_correct_action_type": is_correct_action_type,
+            "is_ip_mismatch": is_ip_mismatch,
+            "is_over_isolation": is_over_isolation,
             "is_repeated": is_repeated,
             "is_novel_action": is_novel,
             "redundant": "Redundant" in sim_reward_info.get("feedback", ""),
