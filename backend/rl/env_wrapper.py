@@ -4,6 +4,7 @@ env_wrapper.py — Gymnasium Wrapper for AutoSec RL
 A Gym wrapper for AutoSec to train PPO agents.
 """
 
+import os
 import gymnasium as gym
 from gymnasium import spaces
 import numpy as np
@@ -21,11 +22,12 @@ class AutoSecGymEnv(gym.Env):
     """
     OpenAI Gym compatible interface for AutoSec SOC simulator.
     """
-    def __init__(self, task_id: str = "task_rl_01"):
+    def __init__(self, task_id: str = "task_hard", seed: int = 42):
         super().__init__()
-        self.sim = SimulationEnvironment(task_id=task_id)
-        self.sim.max_steps = 30 
+        self.sim = SimulationEnvironment(task_id=task_id, seed=seed)
+        self.sim.max_steps = int(os.getenv("MAX_STEPS", "15"))
         self.last_action_multi = None
+        self._seen_action_targets: set = set()  # For novel action tracking
         
         # Action space: [Strategy, Tactic, Target]
         self.action_space = spaces.MultiDiscrete([
@@ -41,9 +43,13 @@ class AutoSecGymEnv(gym.Env):
 
     def reset(self, seed=None, options=None):
         super().reset(seed=seed)
-        obs_obj = self.sim.reset()
+        obs_obj, info = self.sim.reset()
         self.last_action_multi = None
-        return self._transform_obs(obs_obj), {}
+        self._seen_action_targets = set()  # Clear novelty tracker on reset
+        
+        # We pass the original Pydantic obs in the info dict for the API server
+        info["pydantic_obs"] = obs_obj
+        return self._transform_obs(obs_obj), info
 
     def step(self, action_multi):
         strategy_idx, tactic_idx, target_idx = action_multi
@@ -71,38 +77,42 @@ class AutoSecGymEnv(gym.Env):
         )
         
         # Pre-step state tracking
-        pre_threats = self.sim.state.active_threats
+        pre_threats = self.sim.state_obj.active_threats
         
         # Determine "Correct Target" from internal simulation truth
-        hosts_under_attack = {log.hostname for log in self.sim.logs if log.is_malicious}
-        ips_under_attack = {log.source_ip for log in self.sim.logs if log.is_malicious and log.source_ip}
-        is_correct_target = (target in hosts_under_attack) or (target in ips_under_attack)
+        malicious_sources = [log.source_ip for log in self.sim.logs if log.is_malicious]
+        malicious_hosts = [log.hostname for log in self.sim.logs if log.is_malicious]
+        is_correct_target = (target in malicious_hosts) or (target in malicious_sources)
         
         # Execute in Simulator
-        obs_obj, sim_reward_info = self.sim.step(action)
-        post_threats = self.sim.state.active_threats
+        obs_obj, reward_obj, done, sim_reward_info = self.sim.step(action)
+        post_threats = self.sim.state_obj.active_threats
         
         # Calculate custom RL reward
+        action_key = (str(action.action_type), action.target)
+        is_novel = action_key not in self._seen_action_targets
+        self._seen_action_targets.add(action_key)
+        
         step_info = {
             "resolved_threat": post_threats < pre_threats,
             "threat_reduced": post_threats < pre_threats,
             "is_correct_target": is_correct_target,
             "is_repeated": is_repeated,
+            "is_novel_action": is_novel,
             "redundant": "Redundant" in sim_reward_info.get("feedback", ""),
             "unsafe": False 
         }
         
-        reward = calculate_reward(action, self.sim.state, step_info)
-        done = obs_obj.done
+        reward = calculate_reward(action, self.sim.state_obj, step_info)
         
-        # Normalized Terminal Rewards
-        if done:
-            if self.sim.state.active_threats == 0:
-                reward += 10.0 # Stable terminal reward
-            else:
-                reward -= 5.0  
+        # Add rich metadata for the API server to the info dict
+        info = {
+            "pydantic_obs": obs_obj,
+            "pydantic_reward": reward_obj,
+            "sim_info": sim_reward_info
+        }
         
-        return self._transform_obs(obs_obj), float(reward), done, False, {}
+        return self._transform_obs(obs_obj), float(reward), done, False, info
 
     def _transform_obs(self, obs_obj) -> np.ndarray:
         """
@@ -115,7 +125,7 @@ class AutoSecGymEnv(gym.Env):
         [9-13] Defence Status: Is host[i] isolated? (0/1)
         [14] Last log maliciousness (0/1)
         """
-        state = obs_obj.system_state
+        state = self.sim.state_obj
         vec = [
             float(state.compromise_level / 100.0),
             float(state.active_threats / 5.0),
