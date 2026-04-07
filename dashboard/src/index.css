@@ -1,40 +1,38 @@
 @import "tailwindcss";
 
 @theme {
-  --color-brand: #0ea5e9;
-  --color-soc-bg: #0f172a;
-  --color-soc-card: #1e293b;
-  --color-soc-border: #334155;
-  --color-critical: #ef4444;
-  --color-high: #f97316;
-  --color-medium: #eab308;
-  --color-low: #94a3b8;
-  --color-success: #22c55e;
+  --color-brand:       #2563eb;
+  --color-brand-light: #f0f7ff;
+  --color-soc-bg:      #f8fafc;
+  --color-soc-card:    #ffffff;
+  --color-soc-border:  #e2e8f0;
+  --color-critical:    #ef4444;
+  --color-high:        #f59e0b;
+  --color-medium:      #10b981;
+  --color-low:         #94a3b8;
+  --color-success:     #10b981;
 }
 
 :root {
-  background-color: var(--color-soc-bg);
-  color: #f8fafc;
-  font-family: Inter, system-ui, -apple-system, sans-serif;
+  background-color: #f8fafc;
+  color: #1e293b;
+  font-family: 'IBM Plex Sans', system-ui, -apple-system, sans-serif;
+  font-size: 14px;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Monospace — terminals, IPs, values */
+.font-mono {
+  font-family: 'IBM Plex Mono', 'Cascadia Code', 'Consolas', monospace !important;
 }
 
 body {
   margin: 0;
-  min-width: 320px;
   min-height: 100vh;
 }
 
-/* Custom scrollbar for SOC look */
-.custom-scroll::-webkit-scrollbar {
-  width: 5px;
-}
-.custom-scroll::-webkit-scrollbar-track {
-  background: rgba(255, 255, 255, 0.02);
-}
-.custom-scroll::-webkit-scrollbar-thumb {
-  background: rgba(14, 165, 233, 0.2);
-  border-radius: 10px;
-}
-.custom-scroll::-webkit-scrollbar-thumb:hover {
-  background: #0ea5e9;
-}
+/* ── Scrollbar ── */
+.custom-scroll::-webkit-scrollbar       { width: 5px; }
+.custom-scroll::-webkit-scrollbar-track { background: #f1f5f9; }
+.custom-scroll::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+.custom-scroll::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
