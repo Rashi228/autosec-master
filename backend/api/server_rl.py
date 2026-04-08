@@ -303,7 +303,7 @@ async def step(payload: Dict[str, Any] = Body(default={})):
             action_obj = Action(
                 action_type=atype,
                 target=action_dict["target"],
-                strategy="DEFEND",
+                strategy="DETECT",
                 tactic="NO_ACTION",
                 reasoning=action_dict.get("reasoning", f"Autonomous {source} Action")
             )
