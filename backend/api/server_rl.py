@@ -149,6 +149,7 @@ _env_wrapper = None
 _evaluator = MultiPersonaEvaluator()
 _scheduler = CurriculumScheduler()
 _current_obs = None
+_current_pydantic_obs = None
 _episode_elapsed_start = 0
 
 # Lazy-loaded components to speed up startup
@@ -180,6 +181,7 @@ async def reset(payload: Dict[str, Any] = Body(default={})):
     _episode_elapsed_start = time.time()
     
     pydantic_obs = info["pydantic_obs"]
+    _current_pydantic_obs = pydantic_obs
     print(f"Environment reset. Difficulty: {_scheduler.current_difficulty}")
     return {
         "observation": pydantic_obs.model_dump(),
@@ -265,6 +267,7 @@ async def step(payload: Dict[str, Any] = Body(default={})):
             
             # Synchronize the internal RL vector for future predictions
             _current_obs = _env_wrapper._transform_obs(obs_obj)
+            _current_pydantic_obs = obs_obj
             
             # Populate info dictionary for compliance
             info = {
@@ -279,7 +282,7 @@ async def step(payload: Dict[str, Any] = Body(default={})):
             
             # Use Hybrid Decision logic
             hist_tups = [(str(a.get("action_type")).split(".")[-1], a.get("target")) for a in sim_env.action_history]
-            action_dict, source = _decide_action(sim_env.step_id + 1, _env_wrapper.sim.observe(), hist_tups)
+            action_dict, source = _decide_action(sim_env.step_id + 1, _current_pydantic_obs, hist_tups)
             
             # Map the inferred action_dict back to indices for the Gym step if needed, 
             # or just execute directly on the simulation like the External Pilot does.
@@ -317,6 +320,7 @@ async def step(payload: Dict[str, Any] = Body(default={})):
             
             # Synchronize internal RL vector
             _current_obs = _env_wrapper._transform_obs(obs_obj)
+            _current_pydantic_obs = obs_obj
             
             info = {
                 "pydantic_obs": obs_obj,
