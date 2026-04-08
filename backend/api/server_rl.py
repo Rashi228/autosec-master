@@ -124,9 +124,21 @@ def _decide_action(step, obs_obj, history):
             print(f"🤖 [BRAIN] Strategic Layer (LLM) selected: {llm_act['action_type']} on {llm_act['target']}")
             return llm_act, "LLM"
     
-    # 2. Neural Layer (PPO) — placeholder for visibility log
+    # 2. Neural Layer (PPO)
     if _model:
-        print("🧠 [BRAIN] Neural Layer (RL) available but deferring to Policy.")
+        try:
+            import inference
+            inference.ppo_model = _model
+            ppo_act = inference._try_ppo_action(obs_obj, history)
+            if ppo_act:
+                confidence = ppo_act.get("confidence", 1.0)
+                if confidence > 0.40:
+                    print(f"🧠 [BRAIN] Neural Layer (PPO) selected: {ppo_act['action_type']} on {ppo_act['target']} (Conf: {confidence:.2f})")
+                    return ppo_act, "PPO"
+                else:
+                    print(f"⚠️ [BRAIN] Neural Layer (PPO) hesitant (Conf: {confidence:.2f}). Deferring.")
+        except Exception as e:
+            print(f"⚠️ [BRAIN] PPO inference failed: {e}. Deferring.")
     
     # 3. Safety Layer (Policy)
     pol_act = _smart_policy(obs_obj, history)
