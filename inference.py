@@ -54,21 +54,22 @@ PPO_TARGETS    = PPO_HOSTNAMES + ["attacker_ip"]
 # ─────────────────────────────────────────────────────────────────────────────
 load_dotenv()
 
-ENV_BASE_URL       = os.getenv("ENV_BASE_URL",       "http://localhost:7860")
-MODEL_NAME         = os.getenv("MODEL_NAME",         "meta-llama/Llama-3.1-8B-Instruct")
-API_BASE_URL       = os.getenv("API_BASE_URL",       "https://router.huggingface.co/v1")
+ENV_BASE_URL       = os.getenv("ENV_BASE_URL",       "http://localhost:7860").strip()
+MODEL_NAME         = os.getenv("MODEL_NAME",         "meta-llama/Llama-3.1-8B-Instruct").strip()
+API_BASE_URL       = os.getenv("API_BASE_URL",       "https://router.huggingface.co/v1").strip()
 MAX_STEPS          = int(os.getenv("MAX_STEPS",      "15"))
 MAX_TOKENS         = int(os.getenv("MAX_TOKENS",     "256"))
 TEMPERATURE        = float(os.getenv("TEMPERATURE",  "0.0"))
-LLM_CALL_INTERVAL  = int(os.getenv("LLM_INTERVAL",    "3"))   # LLM called every N steps
+LLM_CALL_INTERVAL  = int(os.getenv("LLM_INTERVAL",    "3"))
 RANDOM_SEED        = int(os.getenv("RANDOM_SEED",     "42"))
-ALLOW_FALLBACK     = os.getenv("ALLOW_FALLBACK",      "true").lower() == "true"  # False = strict eval
+ALLOW_FALLBACK     = os.getenv("ALLOW_FALLBACK",      "true").lower() == "true"
 TOP_P              = float(os.getenv("TOP_P",          "1.0"))
+OPENAI_API_KEY     = os.getenv("OPENAI_API_KEY",      "").strip()
 
 # Fix global seed for reproducibility
 random.seed(RANDOM_SEED)
 
-client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"), base_url=API_BASE_URL)
+client = OpenAI(api_key=OPENAI_API_KEY, base_url=API_BASE_URL) if OPENAI_API_KEY else None
 memory = ExperienceMemory()
 
 # ─────────────────────────────────────────────────────────────────────────────
