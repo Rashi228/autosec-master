@@ -420,17 +420,21 @@ async def step(request: Request):
             reward_out = pydantic_reward.model_dump()
             
         print(f"[STEP] Success. Reward: {reward_out.get('value', 0.0)}")
+        # Finalize reward as float for strict validation compatibility
+        reward_val = float(reward_out.get("value", 0.0)) if isinstance(reward_out, dict) else float(reward_out)
+
         # Return comprehensive response for maximum compatibility
         response_data = {
             "observation": pydantic_obs.model_dump(mode="json"),
-            "reward": reward_out,
+            "reward": reward_val,  # Value for validator
+            "pydantic_reward": reward_out,  # Full object for dashboard
             "done": bool(done),
             "info": {
                 "difficulty": str(_scheduler.current_difficulty.value),
                 "explanation": "Adaptive RL policy step complete."
             }
         }
-        # Unroll observation to root level
+        # Unroll observation to root level for multi-standard compatibility
         response_data.update(pydantic_obs.model_dump(mode="json"))
         return response_data
         
@@ -502,7 +506,8 @@ async def get_result():
             if isinstance(last, dict):
                 persona_scores = last.get("persona_evaluations", {})
 
-        return {
+        # Return full flattened result for maximum grader compatibility
+        result_data = {
             "final_grader_score": round(float(episode_result.final_grader_score), 4),
             "summary": episode_result.summary,
             "persona_scores": episode_result.persona_scores,
@@ -511,9 +516,12 @@ async def get_result():
                 "threats_total": sim_env.threats_total,
                 "threats_resolved": sim_env.threats_resolved,
                 "cumulative_score": sim_env.cumulative_score,
-                "difficulty": str(_scheduler.current_difficulty),
+                "difficulty": str(_scheduler.current_difficulty.value),
             }
         }
+        # Unroll EpisodeResult fields into the root level
+        result_data.update(episode_result.model_dump(mode="json"))
+        return result_data
     except Exception as e:
         import traceback
         traceback.print_exc()
