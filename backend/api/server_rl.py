@@ -7,6 +7,7 @@ vector memory endpoints, curriculum difficulty, and explanations.
 
 from fastapi import FastAPI, HTTPException, Body
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from typing import Dict, Any, List
 import os
 import time
@@ -35,6 +36,10 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Serve built dashboard if it exists
+if os.path.exists("dashboard/dist"):
+    app.mount("/", StaticFiles(directory="dashboard/dist", html=True), name="static")
 
 _env_wrapper = None
 _evaluator = MultiPersonaEvaluator()

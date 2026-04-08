@@ -22,7 +22,7 @@ tasks:
     difficulty: hard
 
 # Entrypoints
-entrypoint: "api/server.py"
+entrypoint: "backend/api/server_rl.py"
 inference: "inference.py"
 
 # Custom Grader

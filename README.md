@@ -1,3 +1,17 @@
+---
+title: AutoSec OpenEnv
+emoji: 🛡️
+colorFrom: blue
+colorTo: indigo
+sdk: docker
+app_port: 7860
+tags:
+- openenv
+- reinforcement-learning
+- security
+- autonomous-agent
+---
+
 # 🛡️ AutoSec RL Agent: Autonomous SOC Intelligence
 
 > A production-ready, OpenEnv-compliant autonomous Security Operations Center agent combining **Reinforcement Learning**, **Hybrid LLM reasoning**, and **multi-persona evaluation**. Built for reproducible, credit-efficient, crash-free evaluation.

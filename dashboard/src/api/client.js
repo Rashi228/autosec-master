@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const BASE_URL = 'http://127.0.0.1:7860';
+const BASE_URL = ''; // Relative path for single-container deployment
 
 const apiClient = axios.create({
   baseURL: BASE_URL,
