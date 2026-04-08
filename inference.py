@@ -45,7 +45,7 @@ from autosec_openenv.kill_chain import detect_stage, STAGE_PRIORITY
 # Note: These indices are fixed for the current PPO model version. 
 # Do not reorder without retraining the model.
 PPO_STRATEGIES = ["DETECT", "INVESTIGATE", "CONTAIN", "REMEDIATE"]
-PPO_TACTICS    = ["INSPECT_LOGS", "ISOLATE_HOST", "BLOCK_IP", "NO_ACTION"]
+PPO_TACTICS    = ["INSPECT_LOGS", "ISOLATE_HOST", "BLOCK_IP", "TERMINATE_PROCESS", "NO_ACTION"]
 PPO_HOSTNAMES  = ["web-prod-01", "db-server-01", "dc-01", "hr-laptop-12", "dev-pc-04"]
 PPO_TARGETS    = PPO_HOSTNAMES + ["attacker_ip"]
 
@@ -358,57 +358,86 @@ def _try_ppo_action(obs: Observation, history: List[Tuple[str, str]]) -> Optiona
         
     try:
         vec = _transform_obs_for_ppo(obs)
-        action_multi, _states = ppo_model.predict(vec, deterministic=True)
+        action_multi, _states = ppo_model.predict(vec, deterministic=False)
         
-        # Calculate Confidence (Mean probability across multi-discrete heads)
+        # Calculate Confidence & extract target distribution
         obs_tensor, _ = ppo_model.policy.obs_to_tensor(vec)
         confidence = 1.0
         with torch.no_grad():
             distribution = ppo_model.policy.get_distribution(obs_tensor)
-            # distribution.distribution is a list of Categorical for MultiDiscrete
             probs = [dist.probs.max().item() for dist in distribution.distribution]
             confidence = sum(probs) / len(probs)
-        
-        # Unpack MultiDiscrete [Strategy, Tactic, Target]
+            
+            # Extract target distribution for Top-K fallback
+            target_dist = distribution.distribution[2].probs[0]
+            top_k_targets = torch.topk(target_dist, min(3, len(target_dist))).indices.tolist()
+
+        # Context Awareness: Override if no threat
+        has_active_threat = obs.num_active_threats > 0 or any(l.is_malicious for l in obs.logs)
+        if not has_active_threat:
+            return Action(
+                action_type=ActionType.MONITOR, 
+                target="none", 
+                reasoning="Neural Context: No active threats, monitoring."
+            ).model_dump()
+            
         tactic_idx = action_multi[1]
-        target_idx = action_multi[2]
-        
         tactic = PPO_TACTICS[tactic_idx]
-        target = PPO_TARGETS[target_idx]
         
-        # Diagnostic: Neural Brain is active, what does it think?
         if tactic in ("INSPECT_LOGS", "NO_ACTION"):
-            # Don't log spam if it's passive and everything is fine
-            if obs.num_active_threats > 0:
-                logger.debug(f"🧠 [PPO] Neural brain is hesitant (predicted {tactic}) — falling back.")
+            return Action(
+                action_type=ActionType.MONITOR,
+                target="none",
+                reasoning=f"Neural Brain Strategy: Hesitant ({tactic})."
+            ).model_dump()
+
+        history_set = set(history)
+        action_dict = None
+        
+        # Redundancy Awareness via Top-K sampling (max 3 attempts)
+        for attempt, target_idx in enumerate(top_k_targets):
+            target = PPO_TARGETS[target_idx]
+            a_type = ActionType.MONITOR
+            
+            if tactic == "ISOLATE_HOST": a_type = ActionType.ISOLATE_HOST
+            elif tactic == "BLOCK_IP":  a_type = ActionType.BLOCK_IP
+            elif tactic == "TERMINATE_PROCESS": a_type = ActionType.TERMINATE_PROCESS
+            
+            # Resolve 'attacker_ip' abstraction
+            if target == "attacker_ip":
+                mal_ips = [l.source_ip for l in obs.logs if l.is_malicious and l.source_ip]
+                if mal_ips: target = mal_ips[-1]
+                else: continue
+                
+            # Action Validation Layer (Strict Mapping & Auto-Correct)
+            is_ip = "." in target or (target and target[0].isdigit())
+            if a_type == ActionType.ISOLATE_HOST and is_ip:
+                logger.info(f"🛡️ [PPO_ADJUST] Corrected ISOLATE_HOST on IP {target} to BLOCK_IP.")
+                a_type = ActionType.BLOCK_IP
+                tactic = "BLOCK_IP"
+            elif a_type == ActionType.BLOCK_IP and not is_ip and target != "none" and target != "attacker_ip":
+                logger.info(f"🛡️ [PPO_ADJUST] Corrected BLOCK_IP on host {target} to ISOLATE_HOST.")
+                a_type = ActionType.ISOLATE_HOST
+                tactic = "ISOLATE_HOST"
+                
+            # Redundancy Check
+            act_tup = (a_type.value.split(".")[-1], target)
+            if act_tup in history_set:
+                if attempt < len(top_k_targets) - 1:
+                    logger.debug(f"🧠 [PPO] Target {target} redundant. Trying next best probability.")
+                continue
+                
+            action_dict = Action(
+                action_type=a_type,
+                target=target,
+                reasoning=f"Neural Brain Strategy: Reflexive {tactic} on {target} (Pattern Match)."
+            ).model_dump()
+            break
+            
+        if not action_dict:
+            logger.debug(f"🧠 [PPO] All top 3 targets redundant. Falling back.")
             return None
             
-        a_type = ActionType.MONITOR
-        if tactic == "ISOLATE_HOST": a_type = ActionType.ISOLATE_HOST
-        elif tactic == "BLOCK_IP":  a_type = ActionType.BLOCK_IP
-        
-        # Resolve 'attacker_ip' abstraction
-        if target == "attacker_ip":
-            mal_ips = [l.source_ip for l in obs.logs if l.is_malicious and l.source_ip]
-            if mal_ips: target = mal_ips[-1]
-            else: 
-                logger.debug(f"🧠 [PPO] Brain predicts BLOCK_IP but can't find IP in logs — falling back.")
-                return None
-        
-        # DYNAMIC ALIGNMENT: Auto-correct host/IP mismatches
-        # Only adjust if we actually have malicious log markers to target
-        has_malicious = any(l.is_malicious for l in obs.logs)
-        if has_malicious and a_type == ActionType.BLOCK_IP and target in PPO_HOSTNAMES:
-            logger.info(f"🛡️ [PPO_ADJUST] Corrected BLOCK_IP on host {target} to ISOLATE_HOST for accuracy.")
-            a_type = ActionType.ISOLATE_HOST
-            tactic = "ISOLATE_HOST"
-            
-        action_dict = Action(
-            action_type=a_type,
-            target=target,
-            reasoning=f"Neural Brain Strategy: Reflexive {tactic} on {target} (Pattern Match)."
-        ).model_dump()
-        
         action_dict["confidence"] = confidence
         return action_dict
     except Exception as e:
@@ -460,8 +489,8 @@ def _decide_action(
         confidence = ppo_action.get("confidence", 1.0)
         
         # PPO Confidence Routing: If hesitant, request Strategic Review
-        if confidence < 0.60:
-            logger.info(f"⚠️ [PPO_HESITANT] Confidence {confidence:.2f} < 0.60. Triggering LLM Selective Review...")
+        if confidence < 0.40:
+            logger.info(f"⚠️ [PPO_HESITANT] Confidence {confidence:.2f} < 0.40. Triggering LLM Selective Review...")
             llm_review = _try_llm_action(obs, feedback, history)
             if llm_review:
                 rev_tup = (llm_review["action_type"].upper().split(".")[-1], llm_review["target"])
@@ -692,6 +721,15 @@ def _trigger_online_learning(model, history, final_score):
     )
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# ENTRY POINT
+# ─────────────────────────────────────────────────────────────────────────────
+if __name__ == "__main__":
+    task = "task_hard"
+    for arg in sys.argv[1:]:
+        if arg in ("task_easy", "task_medium", "task_hard"):
+            task = arg
+    run_episode(task)
 # ─────────────────────────────────────────────────────────────────────────────
 # ENTRY POINT
 # ─────────────────────────────────────────────────────────────────────────────

@@ -16,7 +16,7 @@ from backend.rl.reward_engine import calculate_reward
 
 # Simplified action mapping for RL representation
 STRATEGIES = ["DETECT", "INVESTIGATE", "CONTAIN", "REMEDIATE"]
-TACTICS = ["INSPECT_LOGS", "ISOLATE_HOST", "BLOCK_IP", "NO_ACTION"]
+TACTICS = ["INSPECT_LOGS", "ISOLATE_HOST", "BLOCK_IP", "TERMINATE_PROCESS", "NO_ACTION"]
 COMMON_TARGETS = ["web-prod-01", "db-server-01", "dc-01", "hr-laptop-12", "dev-pc-04", "attacker_ip"]
 
 class AutoSecGymEnv(gym.Env):
@@ -64,6 +64,8 @@ class AutoSecGymEnv(gym.Env):
         a_type = ActionType.NO_ACTION
         if tactic == "ISOLATE_HOST":
             a_type = ActionType.ISOLATE_HOST
+        elif tactic == "TERMINATE_PROCESS":
+            a_type = ActionType.TERMINATE_PROCESS
         elif tactic == "BLOCK_IP":
             a_type = ActionType.BLOCK_IP
             if target == "attacker_ip" and self.sim.last_attacker_action:
