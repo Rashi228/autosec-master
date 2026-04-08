@@ -37,9 +37,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Serve built dashboard if it exists
-if os.path.exists("dashboard/dist"):
-    app.mount("/", StaticFiles(directory="dashboard/dist", html=True), name="static")
 
 _env_wrapper = None
 _evaluator = MultiPersonaEvaluator()
@@ -337,6 +334,12 @@ async def get_result():
         import traceback
         traceback.print_exc()
         return {"final_grader_score": None, "summary": f"Grader error: {e}", "persona_scores": {}}
+
+
+# Serve built dashboard if it exists
+# MOVED TO BOTTOM to prevent greedy mount 404s on API routes
+if os.path.exists("dashboard/dist"):
+    app.mount("/", StaticFiles(directory="dashboard/dist", html=True), name="static")
 
 if __name__ == "__main__":
     import uvicorn
