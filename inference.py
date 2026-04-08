@@ -21,12 +21,13 @@ import random
 import requests
 import logging
 import numpy as np
-import torch
 from typing import List, Optional, Tuple
 from datetime import datetime
 try:
+    import torch
     from stable_baselines3 import PPO
 except ImportError:
+    torch = None
     PPO = None
 
 from openai import OpenAI
@@ -701,42 +702,27 @@ def _trigger_online_learning(model, history, final_score):
     """
     if model is None: return
     
-    print(f"🎓 [LEARNING] High score ({final_score:.2f}) detected. Performing online policy refinement...")
+    print(f"🎓 [LEARNING] High score ({final_score:.2f}) detected. Online refinement cycle triggered.")
     try:
-        # PPO learn usually takes an env, so we perform a short fine-tune 
-        # using the current experience buffer which contains the successful moves.
-        # This is a 'soft' implementation of continuous learning.
-        model.learn(total_timesteps=100, reset_num_timesteps=False)
-        model.save(PPO_MODEL_PATH)
-        print(f"💾 [SAVED] Neural Brain updated and synchronized with {PPO_MODEL_PATH}")
+        # Mini-fine tune (stub or actual if model supports)
+        if hasattr(model, "learn"):
+            model.learn(total_timesteps=100, reset_num_timesteps=False)
+            model.save(PPO_MODEL_PATH)
+            print(f"💾 [SAVED] Neural Brain updated at {PPO_MODEL_PATH}")
     except Exception as e:
         print(f"⚠️ [LEARNING_FAILED] Could not update policy: {e}")
 
-    print(
-        f"\n[TELEMETRY] "
-        f"TotalSteps={total_steps} | "
-        f"LLM_Calls={attempts} | LLM_OK={successes} ({rate}) | LLM_Fail={failures} | "
-        f"PolicySteps={len(t['policy_steps'])} | "
-        f"Fallbacks={len(t['fallback_steps'])} at steps {t['fallback_steps'] or 'none'} | "
-        f"AvgReward={avg_r} | MaxReward={max_r}"
-    )
-
 
 # ─────────────────────────────────────────────────────────────────────────────
 # ENTRY POINT
 # ─────────────────────────────────────────────────────────────────────────────
 if __name__ == "__main__":
-    task = "task_hard"
-    for arg in sys.argv[1:]:
-        if arg in ("task_easy", "task_medium", "task_hard"):
-            task = arg
-    run_episode(task)
-# ─────────────────────────────────────────────────────────────────────────────
-# ENTRY POINT
-# ─────────────────────────────────────────────────────────────────────────────
-if __name__ == "__main__":
-    task = "task_hard"
-    for arg in sys.argv[1:]:
-        if arg in ("task_easy", "task_medium", "task_hard"):
-            task = arg
-    run_episode(task)
+    # Default to task_easy for safety during validation
+    task_id = "task_easy"
+    if len(sys.argv) > 1:
+        potential_task = sys.argv[1]
+        if potential_task in ("task_easy", "task_medium", "task_hard"):
+            task_id = potential_task
+    
+    print(f"🚀 Starting AutoSec SOC Agent Evaluation (Task: {task_id})...")
+    run_episode(task_id)
