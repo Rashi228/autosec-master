@@ -1,7 +1,7 @@
 # ============================================================
 # Stage 1: Build the Dashboard (React + Vite)
 # ============================================================
-FROM node:18-slim AS build-stage
+FROM node:20-slim AS build-stage
 
 WORKDIR /dashboard
 
