@@ -170,7 +170,7 @@ async def health():
 
 @app.post("/v1/reset")
 async def reset(payload: Dict[str, Any] = Body(default={})):
-    global _env_wrapper, _current_obs, _episode_elapsed_start
+    global _env_wrapper, _current_obs, _current_pydantic_obs, _episode_elapsed_start
     task_id = payload.get("task_id", "task_hard")
     seed    = int(os.getenv("RANDOM_SEED", "42"))
     print(f"Resetting Environment... task={task_id} seed={seed}")
@@ -194,7 +194,7 @@ async def reset(payload: Dict[str, Any] = Body(default={})):
 
 @app.post("/v1/step")
 async def step(payload: Dict[str, Any] = Body(default={})):
-    global _env_wrapper, _current_obs
+    global _env_wrapper, _current_obs, _current_pydantic_obs
     print("\n[STEP] Request received")
     
     try:
