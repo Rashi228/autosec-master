@@ -150,7 +150,10 @@ const Dashboard = () => {
         const data = await getSystemState();
         setState(data);
         setError(null);
-        if (data.status === 'ACTIVE' && data.task_id) setSelectedTask(data.task_id);
+        if (data.status === 'ACTIVE' && data.task_id) {
+          // Only update selectedTask if local state is empty or potentially out of sync
+          // but avoid aggressive snapping back during selection
+        }
         if (data.status !== 'INACTIVE' && data.system_state) {
           setHistory(prev => [...prev.slice(-19), {
             time: new Date().toLocaleTimeString(),

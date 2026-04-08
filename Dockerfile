@@ -1,28 +1,23 @@
 # ============================================================
-# Stage 1: Build the Dashboard (React + Vite)
+# AutoSec OpenEnv — Secure Docker Image with Full-Stack Support
 # ============================================================
-FROM node:20-slim AS build-stage
 
-WORKDIR /dashboard
-
-# Install build dependencies
+# --- STAGE 1: Build Frontend Dashboard ---
+FROM node:20 AS frontend-build
+WORKDIR /app/dashboard
+# Copy dashboard package files first for caching
 COPY dashboard/package*.json ./
 RUN npm install
-
-# Copy source and build
+# Build the dashboard source
 COPY dashboard/ ./
 RUN npm run build
 
-# ============================================================
-# Stage 2: Final Production Environment (Python 3.11)
-# ============================================================
-FROM python:3.11-slim
 
-# System metadata
+# --- STAGE 2: Backend + Final Image ---
+FROM python:3.11-slim
 LABEL maintainer="AutoSec OpenEnv Team"
 LABEL description="Autonomous SOC Defensive Layer with RL & LLM support"
 
-# Set non-interactive install
 ENV DEBIAN_FRONTEND=noninteractive
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONPATH=/app
@@ -35,35 +30,27 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     git \
     && rm -rf /var/lib/apt/lists/*
 
-# Pre-install core ML/RL requirements
 COPY requirements.txt .
 RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir -r requirements.txt
 
-# Copy critical project components
+# Copy backend components
 COPY autosec_openenv/ ./autosec_openenv/
 COPY backend/ ./backend/
 COPY logs/ ./logs/
-COPY chroma_db/ ./chroma_db/
 COPY inference.py .
 COPY .env* .
 
-# Copy built dashboard from build-stage
-COPY --from=build-stage /dashboard/dist ./dashboard/dist
+# Inject the built frontend files directly from STAGE 1
+COPY --from=frontend-build /app/dashboard/dist ./dashboard/dist
 
-# Set up dedicated non-root security user (UID 1000 for HF Space compatibility)
 RUN useradd -m -u 1000 appuser && \
-    mkdir -p /app/logs /app/chroma_db && \
     chown -R appuser:appuser /app
 USER appuser
 
-# Expose backend API port (7860 is default for HF Spaces)
 EXPOSE 7860
 
-# Hardened health check
 HEALTHCHECK --interval=20s --timeout=15s --start-period=10s --retries=3 \
     CMD curl -f http://localhost:7860/health || exit 1
 
-# Start production-grade FastAPI server with uvicorn
-# The app serves both the API and the static UI files from /
 CMD ["uvicorn", "backend.api.server_rl:app", "--host", "0.0.0.0", "--port", "7860", "--workers", "1"]
