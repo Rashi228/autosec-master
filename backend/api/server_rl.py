@@ -280,7 +280,11 @@ async def step(payload: Dict[str, Any] = Body(default={})):
             print(f"[STEP] Autonomous Pilot Step {sim_env.step_id + 1}...")
             
             # Use Hybrid Decision logic
-            hist_tups = [(str(a.get("action_type")).split(".")[-1], a.get("target")) for a in sim_env.action_history]
+            hist_tups = [
+                (str(a.get("action_type", "")).split(".")[-1], a.get("target", "none")) if isinstance(a, dict)
+                else (str(getattr(a, "action_type", "NO_ACTION")).split(".")[-1], getattr(a, "target", "none"))
+                for a in sim_env.action_history
+            ]
             if _current_pydantic_obs is None:
                 return {"error": "Environment not reset. Call /v1/reset first."}
             action_dict, source = _decide_action(sim_env.step_id + 1, _current_pydantic_obs, hist_tups)
