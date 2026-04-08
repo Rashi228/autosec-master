@@ -27,10 +27,8 @@ htmlcov/
 # AI Data & Memory
 experience_memory.json
 soc_runtime_state.json
-chroma_db/
 war_room_output.txt
 *.log
-logs/
 tmp/
 
 # Node.js: Dashboard
@@ -63,7 +61,6 @@ desktop.ini
 .settings/
 
 # AI: Neural Weights & Model Bundles (Large Binary Files)
-*.zip
 *.pth
 *.h5
 *.onnx
@@ -77,9 +74,4 @@ desktop.ini
 docker-compose.override.yml
 *.tar
 *.tar.gz
-
-chroma_db/
-logs/
-*.bin
-*.zip
-*.sqlite3
+
