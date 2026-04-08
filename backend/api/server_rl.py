@@ -55,9 +55,6 @@ def get_memory():
         _memory = VectorMemory()
     return _memory
 
-@app.get("/")
-async def root():
-    return {"message": "AutoSec Adaptive RL API is active."}
 
 @app.get("/health")
 async def health():
