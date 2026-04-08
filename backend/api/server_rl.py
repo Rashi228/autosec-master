@@ -274,6 +274,7 @@ async def step(payload: Dict[str, Any] = Body(default={})):
             }
         else:
             # Fall back to internal Hybrid Brain (Autonomous Pilot)
+            sim_env = _env_wrapper.sim
             print(f"[STEP] Autonomous Pilot Step {sim_env.step_id + 1}...")
             
             # Use Hybrid Decision logic
