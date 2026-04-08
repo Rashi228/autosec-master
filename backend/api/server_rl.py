@@ -18,6 +18,8 @@ from backend.evaluator.personas import MultiPersonaEvaluator
 from backend.curriculum.scheduler import CurriculumScheduler
 from backend.memory.vector_db import VectorMemory
 from backend.rl.env_wrapper import AutoSecGymEnv
+from fastapi import Request
+import json
 
 try:
     from stable_baselines3 import PPO
@@ -180,9 +182,17 @@ async def health():
     return {"status": "ok", "timestamp": time.time()}
 
 @app.post("/v1/reset")
-async def reset(payload: Dict[str, Any] = Body(default={})):
+@app.post("/reset")
+async def reset(request: Request):
+    try:
+        body = await request.body()
+        payload = json.loads(body) if body else {}
+    except Exception:
+        payload = {}
+        
     global _env_wrapper, _current_obs, _current_pydantic_obs, _episode_elapsed_start
-    task_id = payload.get("task_id", "task_hard")
+    # Change default to task_easy as it's the standard entry-level task
+    task_id = payload.get("task_id", "task_easy")
     seed    = int(os.getenv("RANDOM_SEED", "42"))
     print(f"Resetting Environment... task={task_id} seed={seed}")
     params = _scheduler.get_environment_params()
@@ -194,17 +204,29 @@ async def reset(payload: Dict[str, Any] = Body(default={})):
     pydantic_obs = info["pydantic_obs"]
     _current_pydantic_obs = pydantic_obs
     print(f"Environment reset. Difficulty: {_scheduler.current_difficulty}")
-    return {
-        "observation": pydantic_obs.model_dump(),
+    
+    # Return observation both wrapped and at root for maximum compatibility
+    response_data = {
+        "observation": pydantic_obs.model_dump(mode="json"),
         "info": {
             "status": "ACTIVE",
-            "difficulty": _scheduler.current_difficulty,
+            "difficulty": str(_scheduler.current_difficulty.value),
             "params": params
         }
     }
+    # Add root-level observation fields too
+    response_data.update(pydantic_obs.model_dump(mode="json"))
+    return response_data
 
 @app.post("/v1/step")
-async def step(payload: Dict[str, Any] = Body(default={})):
+@app.post("/step")
+async def step(request: Request):
+    try:
+        body = await request.body()
+        payload = json.loads(body) if body else {}
+    except Exception:
+        payload = {}
+        
     global _env_wrapper, _current_obs, _current_pydantic_obs
     print("\n[STEP] Request received")
     
@@ -398,15 +420,19 @@ async def step(payload: Dict[str, Any] = Body(default={})):
             reward_out = pydantic_reward.model_dump()
             
         print(f"[STEP] Success. Reward: {reward_out.get('value', 0.0)}")
-        return {
-            "observation": pydantic_obs.model_dump(),
+        # Return comprehensive response for maximum compatibility
+        response_data = {
+            "observation": pydantic_obs.model_dump(mode="json"),
             "reward": reward_out,
             "done": bool(done),
             "info": {
-                "difficulty": str(_scheduler.current_difficulty),
+                "difficulty": str(_scheduler.current_difficulty.value),
                 "explanation": "Adaptive RL policy step complete."
             }
         }
+        # Unroll observation to root level
+        response_data.update(pydantic_obs.model_dump(mode="json"))
+        return response_data
         
     except Exception as e:
         print(f"[ERROR] Step Failure: {e}")
