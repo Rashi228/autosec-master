@@ -8,11 +8,9 @@ services:
     ports:
       - "7860:7860"
     environment:
-      # Use localhost for host machine access, or service name within net
       - ENV_BASE_URL=http://localhost:7860
       - PYTHONUNBUFFERED=1
     volumes:
-      # Live-sync backend and simulation for hot-patching
       - ./backend:/app/backend:ro
       - ./autosec_openenv:/app/autosec_openenv:ro
       - ./logs:/app/logs:rw
@@ -24,7 +22,6 @@ services:
       retries: 3
       start_period: 20s
 
-  # Dedicated Inference Container for CLI evaluation
   inference-agent:
     build:
       context: .
@@ -37,13 +34,11 @@ services:
     env_file:
       - .env
     environment:
-      # Connect to the sibling env container
       - ENV_BASE_URL=http://autosec-rl-env:7860
     command: [ "python", "inference.py" ]
     profiles:
-      - eval # Run: docker compose --profile eval up
+      - eval
 
-  # Optional: Monitoring Dashboard
   dashboard:
     image: node:18-slim
     container_name: autosec_dashboard
@@ -56,4 +51,4 @@ services:
       - VITE_API_URL=http://localhost:7860
     command: [ "npm", "run", "dev", "--", "--host", "0.0.0.0" ]
     profiles:
-      - ui # Run: docker compose --profile ui up
+      - ui

@@ -1,9 +1,9 @@
-"""
-scheduler.py — Curriculum Learning Engine
-=========================================
-Dynamically adjusts the difficulty of the simulated environment based on 
-the RL agent's running success rate and reward trend.
-"""
+\
+\
+\
+\
+\
+   
 
 from enum import Enum
 from typing import Dict, Any
@@ -19,8 +19,8 @@ class CurriculumScheduler:
         self.episode_count = 0
         self.success_history = []
         
-        # Thresholds for promotion
-        self.promotion_threshold = 0.85 # 85% success rate over window
+                                  
+        self.promotion_threshold = 0.85                               
         self.window_size = 20
 
     def record_episode(self, success: bool, final_reward: float):
@@ -47,25 +47,25 @@ class CurriculumScheduler:
                 self.success_history.clear()
 
     def get_environment_params(self) -> Dict[str, Any]:
-        """Returns parameters that adjust the simulator's difficulty."""
+                                                                        
         if self.current_difficulty == DifficultyLevel.BASIC:
             return {
                 "num_hosts": 3,
-                "noise_level": 0.1,  # 10% benign logs
-                "attacker_speed": 1,  # Attacker moves every step
+                "noise_level": 0.1,                   
+                "attacker_speed": 1,                             
                 "max_active_threats": 1
             }
         elif self.current_difficulty == DifficultyLevel.INTERMEDIATE:
             return {
                 "num_hosts": 10,
-                "noise_level": 0.5,  # 50% benign logs
+                "noise_level": 0.5,                   
                 "attacker_speed": 1,
                 "max_active_threats": 3
             }
-        else: # ADVANCED
+        else:           
             return {
                 "num_hosts": 50,
-                "noise_level": 0.9,  # 90% benign logs (needle in haystack)
-                "attacker_speed": 2, # Attacker gets multiple moves
+                "noise_level": 0.9,                                        
+                "attacker_speed": 2,                               
                 "max_active_threats": 5
             }

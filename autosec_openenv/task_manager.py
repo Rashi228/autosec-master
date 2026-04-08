@@ -1,9 +1,9 @@
-"""
-task_manager.py — SOC Scenario Configuration
-============================================
-Defines the different simulation tasks (Episodes) 
-based on Meta OpenEnv specifications.
-"""
+\
+\
+\
+\
+\
+   
 
 from typing import Dict, Any, List, Optional
 from autosec_openenv.models import TaskInfo
@@ -33,9 +33,9 @@ SCENARIOS = {
 }
 
 class TaskManager:
-    """
-    Manager for loading and transitioning between SOC scenarios.
-    """
+\
+\
+       
 
     @staticmethod
     def list_tasks() -> List[TaskInfo]:
@@ -46,5 +46,5 @@ class TaskManager:
         return SCENARIOS.get(task_id, SCENARIOS["task_easy"])
 
 def load_scenario(task_id: str) -> TaskInfo:
-    """Helper for simulation environment."""
+                                            
     return TaskManager.get_task(task_id)

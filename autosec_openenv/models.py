@@ -1,8 +1,8 @@
-"""
-models.py — Core Data Contracts for AutoSec 
-==========================================
-Defines the Pydantic schemas for logs, states, and actions.
-"""
+\
+\
+\
+\
+   
 
 from enum import Enum
 from typing import List, Optional, Dict, Any
@@ -73,7 +73,7 @@ class SecurityLog(BaseModel):
 
 class SystemState(BaseModel):
     status: SystemStatus = SystemStatus.NORMAL
-    compromise_level: float = 0.0 # 0.0 to 100.0
+    compromise_level: float = 0.0               
     active_threats: int = 0
     blocked_ips: List[str] = Field(default_factory=list)
     isolated_hosts: List[str] = Field(default_factory=list)
@@ -85,11 +85,11 @@ class Observation(BaseModel):
     logs: List[SecurityLog] = Field(default_factory=list)
     system_state: Dict[str, Any] = Field(default_factory=dict)
     
-    # Structured Features for RL Agents
+                                       
     num_active_threats: int = 0
     threat_severity_sum: int = 0
     recent_event_types: List[str] = Field(default_factory=list)
-    impact_score: float = 0.0 # 0.0 to 1.0 (CriticalITY of compromised assets)
+    impact_score: float = 0.0                                                 
     
 class Reward(BaseModel):
     value: float = Field(default=0.0, ge=0.0, le=1.0)
@@ -101,7 +101,7 @@ class Action(BaseModel):
     strategy: StrategyType = StrategyType.NONE
     tactic: TacticType = TacticType.NO_ACTION
     action_type: ActionType
-    target: str # IP, Hostname, or User
+    target: str                        
     reasoning: str = ""
 
 class AttackAction(BaseModel):

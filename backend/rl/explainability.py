@@ -1,18 +1,18 @@
-"""
-explainability.py — Action Explanation Module
-=============================================
-Enriches agent actions with reasoning, evidence, and confidence scores.
-"""
+\
+\
+\
+\
+   
 
 from typing import Dict, Any, List
 from autosec_openenv.models import Action, SecurityLog
 
 def generate_action_explanation(action: Action, logs: List[SecurityLog], persona_feedback: Dict[str, Any]) -> Dict[str, Any]:
-    """
-    Generates a structured explanation for an action.
-    """
+\
+\
+       
     
-    # Simple heuristic to find evidence
+                                       
     evidence = []
     if action.target:
         evidence = [log.raw_log for log in logs if action.target in log.raw_log][-3:]

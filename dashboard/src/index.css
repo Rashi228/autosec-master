@@ -21,7 +21,7 @@
   -webkit-font-smoothing: antialiased;
 }
 
-/* Monospace — terminals, IPs, values */
+
 .font-mono {
   font-family: 'IBM Plex Mono', 'Cascadia Code', 'Consolas', monospace !important;
 }
@@ -31,7 +31,7 @@ body {
   min-height: 100vh;
 }
 
-/* ── Scrollbar ── */
+
 .custom-scroll::-webkit-scrollbar       { width: 5px; }
 .custom-scroll::-webkit-scrollbar-track { background: #f1f5f9; }
 .custom-scroll::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }

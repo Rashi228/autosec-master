@@ -1,8 +1,8 @@
-"""
-inference_rl.py — Run Trained AutoSec RL Agent
-==============================================
-Loads the trained PPO model and runs it in the environment.
-"""
+\
+\
+\
+\
+   
 
 import time
 from stable_baselines3 import PPO
@@ -31,7 +31,7 @@ def run_inference():
         obs, reward, done, truncated, info = env.step(action)
         step += 1
         
-        # Display simplified state info
+                                       
         state = env.sim.state
         print(f"[{step}] Reward: {reward:+.2f} | Threats: {state.active_threats} | Compromise: {state.compromise_level:.1f}%")
         time.sleep(0.5)

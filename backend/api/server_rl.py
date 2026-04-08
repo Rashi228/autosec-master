@@ -1,9 +1,9 @@
-"""
-server_rl.py — Enhanced API Gateway for AutoSec RL
-==================================================
-Extends the original FastAPI server with RL-specific telemetry,
-vector memory endpoints, curriculum difficulty, and explanations.
-"""
+\
+\
+\
+\
+\
+   
 
 from fastapi import FastAPI, HTTPException, Body
 from fastapi.middleware.cors import CORSMiddleware
@@ -42,7 +42,7 @@ _scheduler = CurriculumScheduler()
 _current_obs = None
 _episode_elapsed_start = 0
 
-# Lazy-loaded components to speed up startup
+                                            
 _memory = None
 
 def get_memory():
@@ -93,7 +93,7 @@ async def step(payload: Dict[str, Any] = Body(default={})):
         if _env_wrapper is None:
             return {"error": "Environment not initialized"}
         
-        # 1. Action Selection: External Pilot vs internal RL
+                                                            
         client_action_data = payload.get("action")
         is_ip_mismatch = payload.get("is_ip_mismatch", False)
         is_over_isolation = payload.get("is_over_isolation", False)
@@ -102,7 +102,7 @@ async def step(payload: Dict[str, Any] = Body(default={})):
             print("[STEP] External Pilot Action Received.")
             from autosec_openenv.models import ActionType, Action
             
-            # Map client dictionary to Action object
+                                                    
             atype_str = client_action_data.get("action_type", "NO_ACTION")
             if "." in atype_str: atype_str = atype_str.split(".")[-1]
             target = client_action_data.get("target", "none")
@@ -115,20 +115,20 @@ async def step(payload: Dict[str, Any] = Body(default={})):
                 reasoning=client_action_data.get("reasoning", "Client Pilot Action")
             )
             
-            # Capture Malicious context BEFORE the step (successful blocks erase logs)
+                                                                                      
             malicious_sources_pre = {str(log.source_ip).strip() for log in _env_wrapper.sim.logs if log.is_malicious}
             malicious_hosts_pre = {str(log.hostname).strip() for log in _env_wrapper.sim.logs if log.is_malicious}
 
-            # Execute directly on simulation
+                                            
             pre_threats = _env_wrapper.sim.state_obj.active_threats
             obs_obj, reward_obj, done, info_sim = _env_wrapper.sim.step(action_obj)
             post_threats = _env_wrapper.sim.state_obj.active_threats
             
-            # Robust mapping for IPs and Hostnames using PRE-STEP context
+                                                                         
             clean_target = str(target).strip()
             is_correct_target = (clean_target in malicious_hosts_pre) or (clean_target in malicious_sources_pre)
             
-            # 2. IP vs Host Mismatch Detection
+                                              
             is_ip = "." in target or (target and target[0].isdigit())
             is_ip_mismatch = False
             a_type = action_obj.action_type
@@ -137,7 +137,7 @@ async def step(payload: Dict[str, Any] = Body(default={})):
             elif a_type == ActionType.ISOLATE_HOST and is_ip:
                 is_ip_mismatch = True
             
-            # 3. Correct Action Type logic
+                                          
             has_threat = _env_wrapper.sim.state_obj.active_threats > 0 or len(malicious_sources_pre) > 0
             is_correct_action_type = (has_threat and a_type in [ActionType.BLOCK_IP, ActionType.ISOLATE_HOST])
             if not has_threat and a_type in [ActionType.MONITOR, ActionType.NO_ACTION]:
@@ -154,25 +154,25 @@ async def step(payload: Dict[str, Any] = Body(default={})):
                 "is_repeated": False
             }
             
-            # Override standard simulation reward with stabilized RL reward
+                                                                           
             reward = calculate_reward(action_obj, _env_wrapper.sim.state_obj, step_info)
             
-            # Synchronize the internal RL vector for future predictions
+                                                                       
             _current_obs = _env_wrapper._transform_obs(obs_obj)
             
-            # Populate info dictionary for compliance
+                                                     
             info = {
                 "pydantic_obs": obs_obj,
                 "pydantic_reward": {"value": reward, "feedback": info_sim.get("feedback", "")},
                 "sim_info": info_sim
             }
         else:
-            # Fall back to internal RL Autonomous Pilot
+                                                       
             if _model:
                 print("[STEP] RL Autonomous Inference...")
                 action_multi, _ = _model.predict(_current_obs, deterministic=True)
             else:
-                action_multi = [0, 3, 0] # Default
+                action_multi = [0, 3, 0]          
                 
             s_idx, t_idx, trg_idx = action_multi
             from autosec_openenv.models import ActionType, Action
@@ -185,21 +185,21 @@ async def step(payload: Dict[str, Any] = Body(default={})):
                 reasoning=f"Agent Strategy: {STRATEGIES[s_idx]}"
             )
             
-            # Re-map indices to ActionType
+                                          
             if action_obj.tactic == "ISOLATE_HOST": action_obj.action_type = ActionType.ISOLATE_HOST
             elif action_obj.tactic == "BLOCK_IP": action_obj.action_type = ActionType.BLOCK_IP
             elif action_obj.tactic == "INSPECT_LOGS": action_obj.action_type = ActionType.MONITOR
             
-            # Execute step through the Hub wrapper to update internal RL state
+                                                                              
             _current_obs, reward, done, _, info = _env_wrapper.step(action_multi)
-        # 2. Preparation for Evaluation/Memory
+                                              
         sim_env = _env_wrapper.sim
         
-        # 3. Calling Persona Evaluator for rich feedback
+                                                        
         print("[STEP] Calling Persona Evaluator...")
         persona_feedback = _evaluator.evaluate_action(action_obj, sim_env.state_obj, sim_env.logs)
         
-        # 4. Contextual Memory
+                              
         print("[STEP] Storing in Vector Memory...")
         try:
             get_memory().store_experience(
@@ -211,7 +211,7 @@ async def step(payload: Dict[str, Any] = Body(default={})):
         except Exception as mem_e:
             print(f"Memory error: {mem_e}")
 
-        # Record history for frontend
+                                     
         p_scores = [p["score"] for p in persona_feedback["personas"].values() if "score" in p]
         confidence = sum(p_scores) / len(p_scores) if p_scores else 0.5
         
@@ -232,7 +232,7 @@ async def step(payload: Dict[str, Any] = Body(default={})):
         pydantic_obs = info["pydantic_obs"]
         pydantic_reward = info["pydantic_reward"]
         
-        # Standardize reward output (handle both dict and Pydantic model)
+                                                                         
         reward_out = pydantic_reward
         if hasattr(pydantic_reward, "model_dump"):
             reward_out = pydantic_reward.model_dump()
@@ -286,7 +286,7 @@ async def get_state():
 
 @app.get("/v1/result")
 async def get_result():
-    """Returns the final graded result for the current episode."""
+                                                                  
     global _env_wrapper
     if _env_wrapper is None:
         return {"final_grader_score": 0.0, "summary": "No episode ran.", "persona_scores": {}}
@@ -297,7 +297,7 @@ async def get_result():
         threats_remaining = state.active_threats
         summary = "All threats resolved." if threats_remaining == 0 else f"{threats_remaining} threat(s) remaining."
 
-        # Use get_episode_result() - the correct grader method
+                                                              
         episode_result = sim_env.grader.get_episode_result(
             final_state_obj=state,
             total_steps=sim_env.step_id,
@@ -309,7 +309,7 @@ async def get_result():
             logs=sim_env.logs
         )
 
-        # Get persona evaluations from last action history entry
+                                                                
         persona_scores = {}
         if sim_env.action_history:
             last = sim_env.action_history[-1]

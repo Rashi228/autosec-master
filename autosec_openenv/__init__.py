@@ -1,9 +1,9 @@
-"""
-AutoSec OpenEnv - Autonomous Security Operations Framework
-=========================================================
-An end-to-end framework for training and evaluating 
-AI agents on SOC response tasks.
-"""
+\
+\
+\
+\
+\
+   
 
 from autosec_openenv.models import SecurityLog, Observation, Action, EpisodeResult
 from autosec_openenv.env import SimulationEnvironment

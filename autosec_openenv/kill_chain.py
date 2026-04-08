@@ -1,9 +1,9 @@
-"""
-kill_chain.py — Cyber Kill Chain Detection Logic
-================================================
-Maps security logs to standardized attack stages.
-Used to help the Defender Agent prioritize actions.
-"""
+\
+\
+\
+\
+\
+   
 
 from enum import Enum
 from typing import List, Optional
@@ -19,7 +19,7 @@ class KillChainStage(str, Enum):
     CLEANUP = "cleanup"
     BENIGN = "benign"
 
-# Mapping log types to kill chain stages
+                                        
 STAGE_MAPPING = {
     "PORT_SCAN": KillChainStage.RECONNAISSANCE,
     "FAILED_LOGIN": KillChainStage.RECONNAISSANCE,
@@ -33,7 +33,7 @@ STAGE_MAPPING = {
     "BENIGN_ACTIVITY": KillChainStage.BENIGN,
 }
 
-# Priority of stages (higher is more critical)
+                                              
 STAGE_PRIORITY = {
     KillChainStage.BENIGN: 0,
     KillChainStage.RECONNAISSANCE: 1,
@@ -45,10 +45,10 @@ STAGE_PRIORITY = {
 }
 
 def detect_stage(logs: List[SecurityLog]) -> KillChainStage:
-    """
-    Analyzes a window of logs and returns the most critical 
-    Kill Chain stage detected.
-    """
+\
+\
+\
+       
     if not logs:
         return KillChainStage.BENIGN
         
@@ -56,7 +56,7 @@ def detect_stage(logs: List[SecurityLog]) -> KillChainStage:
     highest_priority = -1
     
     for log in logs:
-        # Handle both Pydantic objects and raw dicts from the API
+                                                                 
         e_type = log.event_type if hasattr(log, "event_type") else log.get("event_type")
         stage = STAGE_MAPPING.get(e_type, KillChainStage.BENIGN)
         priority = STAGE_PRIORITY.get(stage, 0)
@@ -68,9 +68,9 @@ def detect_stage(logs: List[SecurityLog]) -> KillChainStage:
     return highest_stage
 
 def get_recommended_action_category(stage: KillChainStage) -> str:
-    """
-    Returns the recommended action category based on the attacker's progress.
-    """
+\
+\
+       
     if stage in [KillChainStage.RECONNAISSANCE, KillChainStage.INITIAL_ACCESS]:
         return "CONTAINMENT (BLOCK_IP)"
     if stage in [KillChainStage.PRIVILEGE_ESCALATION, KillChainStage.LATERAL_MOVEMENT]:

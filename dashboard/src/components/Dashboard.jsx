@@ -6,9 +6,7 @@ import {
 import { getSystemState, resetEnvironment, stepEnvironment, getEpisodeResult } from '../api/client';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 
-/* ─────────────────────────────────────────
-   HELPER FUNCTIONS
-───────────────────────────────────────── */
+
 
 const getSeverityColor = (sev) => {
   if (sev === 'CRITICAL') return 'text-red-700 bg-red-50 border border-red-100';
@@ -27,9 +25,7 @@ const getStageDesc = (stage) => ({
   lateral:              'Spreading to internal systems.',
 }[stage.toLowerCase()] || '');
 
-/* ─────────────────────────────────────────
-   STAT CARD — clean, no left-border accent
-───────────────────────────────────────── */
+
 const getDifficultyLabel = (taskId, stateDiff) => {
   if (taskId === 'task_easy') return 'L1 — BASIC';
   if (taskId === 'task_medium') return 'L2 — INTERMEDIATE';
@@ -48,15 +44,13 @@ const StatCard = ({ label, value, icon, sub }) => (
   </div>
 );
 
-/* ─────────────────────────────────────────
-   ATTACK PIPELINE
-───────────────────────────────────────── */
+
 const AttackPipeline = ({ currentStage }) => {
   const STAGES = ['reconnaissance', 'initial_access', 'privilege_escalation', 'lateral_movement', 'exfiltration'];
   const normalizedStage = (currentStage || 'benign').toLowerCase().replace(/\s+/g, '_');
   const isBenign   = normalizedStage === 'benign';
   
-  // Try to find index by exact match or substring for robustness
+  
   let currentIdx = STAGES.indexOf(normalizedStage);
   if (currentIdx === -1) {
     currentIdx = STAGES.findIndex(s => normalizedStage.includes(s) || s.includes(normalizedStage));
@@ -64,9 +58,9 @@ const AttackPipeline = ({ currentStage }) => {
 
   return (
     <div className="relative flex items-center justify-between px-1 py-2">
-      {/* Base track */}
+      {}
       <div className="absolute left-0 right-0 top-[22px] h-px bg-slate-200" />
-      {/* Filled track */}
+      {}
       {!isBenign && currentIdx >= 0 && (
         <div
           className="absolute top-[22px] left-0 h-px bg-brand transition-all duration-700"
@@ -79,7 +73,7 @@ const AttackPipeline = ({ currentStage }) => {
         const isCurrent = !isBenign && idx === currentIdx;
         return (
           <div key={stage} className="relative z-10 flex flex-col items-center gap-2.5 group">
-            {/* Node */}
+            {}
             <div className={`w-11 h-11 flex items-center justify-center rounded-sm border text-[10px] font-bold
               transition-all duration-300
               ${isCurrent ? 'bg-brand border-brand text-white shadow-md' :
@@ -88,13 +82,13 @@ const AttackPipeline = ({ currentStage }) => {
             >
               {String(idx + 1).padStart(2, '0')}
             </div>
-            {/* Label */}
+            {}
             <span className={`text-[9px] font-semibold uppercase tracking-wider text-center leading-tight
               ${isCurrent ? 'text-brand' : isActive ? 'text-slate-600' : 'text-slate-400'}`}
               style={{ maxWidth: 70 }}>
               {stage.replace(/_/g, '\u00A0')}
             </span>
-            {/* Tooltip */}
+            {}
             <div className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 w-44 bg-white border border-slate-200
               shadow-lg rounded-md p-3 text-[10px] opacity-0 group-hover:opacity-100 pointer-events-none
               transition-opacity z-50">
@@ -108,9 +102,7 @@ const AttackPipeline = ({ currentStage }) => {
   );
 };
 
-/* ─────────────────────────────────────────
-   CHART TOOLTIP
-───────────────────────────────────────── */
+
 const SOCTooltip = ({ active, payload }) => {
   if (!active || !payload?.length) return null;
   return (
@@ -123,16 +115,12 @@ const SOCTooltip = ({ active, payload }) => {
   );
 };
 
-/* ─────────────────────────────────────────
-   LOADING SPINNER — clean minimal
-───────────────────────────────────────── */
+
 const Spinner = () => (
   <div className="w-8 h-8 border-2 border-slate-200 border-t-brand rounded-full animate-spin" />
 );
 
-/* ─────────────────────────────────────────
-   MAIN DASHBOARD
-───────────────────────────────────────── */
+
 const Dashboard = () => {
   const [state, setState]               = useState(null);
   const [history, setHistory]           = useState([]);
@@ -226,7 +214,7 @@ const Dashboard = () => {
   return (
     <div className="min-h-screen bg-soc-bg text-slate-800 font-sans antialiased">
 
-      {/* ── HEADER ── */}
+      {}
       <header className="sticky top-0 z-50 bg-white border-b border-soc-border flex items-center justify-between px-6 py-3.5">
         <div className="flex items-center gap-3">
           <div className="p-2 bg-brand rounded-md">
@@ -239,7 +227,7 @@ const Dashboard = () => {
         </div>
 
         <div className="flex items-center gap-5">
-          {/* Status Pill */}
+          {}
           <div className="flex items-center gap-2 px-3 py-1.5 bg-slate-50 border border-soc-border rounded-md">
             <span className={`w-2 h-2 rounded-full ${state?.status === 'ACTIVE' ? 'bg-green-500' : 'bg-slate-300'}`} />
             <span className="text-[10px] font-semibold uppercase tracking-widest text-slate-500">
@@ -247,7 +235,7 @@ const Dashboard = () => {
             </span>
           </div>
 
-          {/* Auto-pilot toggle */}
+          {}
           <div className="flex items-center gap-3">
             <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-widest">
               {isAutoPilot ? 'Autonomous' : 'Manual'}
@@ -260,7 +248,7 @@ const Dashboard = () => {
             </button>
           </div>
 
-          {/* Task selector */}
+          {}
           <select
             value={selectedTask}
             onChange={e => setSelectedTask(e.target.value)}
@@ -272,7 +260,7 @@ const Dashboard = () => {
             <option value="task_hard">L3 — Stealth APT</option>
           </select>
 
-          {/* Reset button */}
+          {}
           <button
             onClick={() => handleReset()}
             disabled={isResetting}
@@ -286,13 +274,13 @@ const Dashboard = () => {
         </div>
       </header>
 
-      {/* ── MAIN ── */}
+      {}
       <main className="grid grid-cols-12 gap-4 p-5 max-w-[1900px] mx-auto">
 
-        {/* ── LEFT COLUMN ── */}
+        {}
         <div className="col-span-12 lg:col-span-7 flex flex-col gap-4">
 
-          {/* Stat cards */}
+          {}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <StatCard
               label="Active Threats"
@@ -317,7 +305,7 @@ const Dashboard = () => {
             />
           </div>
 
-          {/* Attack Pipeline */}
+          {}
           <div className="bg-white border border-soc-border rounded-md shadow-sm p-6">
             <div className="flex items-center justify-between mb-5 pb-4 border-b border-soc-border">
               <div className="flex items-center gap-2">
@@ -331,7 +319,7 @@ const Dashboard = () => {
             <AttackPipeline currentStage={state?.current_stage || 'benign'} />
           </div>
 
-          {/* Network Graph */}
+          {}
           <div className="bg-white border border-soc-border rounded-md shadow-sm p-6 h-[290px] flex flex-col">
             <div className="flex items-center justify-between mb-5 pb-4 border-b border-soc-border">
               <div className="flex items-center gap-2">
@@ -364,11 +352,11 @@ const Dashboard = () => {
           </div>
         </div>
 
-        {/* ── RIGHT COLUMN: AI ENGINE ── */}
+        {}
         <div className="col-span-12 lg:col-span-5 flex flex-col gap-4">
           <div className="bg-white border border-soc-border rounded-md shadow-sm p-7 flex flex-col h-full min-h-[560px]">
 
-            {/* Panel header */}
+            {}
             <div className="flex items-center gap-3 mb-7 pb-5 border-b border-soc-border">
               <div className="p-2 bg-blue-50 border border-blue-100 rounded-md">
                 <Cpu className="w-4 h-4 text-brand" />
@@ -381,7 +369,7 @@ const Dashboard = () => {
 
             {lastAction ? (
               <div className="flex flex-col gap-6 flex-1">
-                {/* Action block */}
+                {}
                 <div className="bg-slate-50 border border-soc-border rounded-md p-5">
                   <div className="flex items-center justify-between mb-4 pb-4 border-b border-soc-border">
                     <div>
@@ -415,7 +403,7 @@ const Dashboard = () => {
                   </div>
                 </div>
 
-                {/* Reasoning */}
+                {}
                 <div>
                   <div className="flex items-center gap-2 mb-3">
                     <Terminal className="w-3.5 h-3.5 text-slate-400" />
@@ -457,7 +445,7 @@ const Dashboard = () => {
                   </div>
                 </div>
 
-                {/* Reward footer */}
+                {}
                 <div className="mt-auto pt-5 border-t border-soc-border flex items-center gap-3">
                   <Zap className="w-4 h-4 text-slate-300" />
                   <span className="text-xl font-bold font-mono text-slate-800">
@@ -470,7 +458,7 @@ const Dashboard = () => {
               </div>
 
             ) : (
-              /* Idle state */
+              
               <div className="flex-1 flex flex-col items-center justify-center gap-6">
                 <div className="p-5 bg-slate-50 border border-soc-border rounded-md text-center">
                   <div className="flex justify-center mb-4">
@@ -500,10 +488,10 @@ const Dashboard = () => {
           </div>
         </div>
 
-        {/* ── BOTTOM ROW ── */}
+        {}
         <div className="col-span-12 grid grid-cols-12 gap-4">
 
-          {/* SIEM Feed */}
+          {}
           <div className="col-span-12 lg:col-span-8 h-[480px] bg-white border border-soc-border rounded-md shadow-sm p-6 flex flex-col overflow-hidden">
             <div className="flex items-center justify-between mb-5 pb-4 border-b border-soc-border">
               <div className="flex items-center gap-2">
@@ -552,7 +540,7 @@ const Dashboard = () => {
             </div>
           </div>
 
-          {/* Defensive Enforcement Log */}
+          {}
           <div className="col-span-12 lg:col-span-4 h-[480px] bg-slate-50 border border-soc-border rounded-md p-6
             font-mono text-[11px] flex flex-col shadow-sm overflow-hidden">
             <div className="flex items-center justify-between mb-5 pb-4 border-b border-slate-200">
@@ -591,12 +579,12 @@ const Dashboard = () => {
         </div>
       </main>
 
-      {/* ── RESULT MODAL ── */}
+      {}
       {showResultModal && resultData && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-6">
           <div className="w-full max-w-xl bg-white border border-soc-border rounded-md shadow-2xl overflow-hidden">
 
-            {/* Modal header */}
+            {}
             <div className="flex items-center justify-between px-8 py-6 border-b border-soc-border bg-slate-50">
               <div className="flex items-center gap-4">
                 <div className="p-2 bg-green-100 border border-green-200 rounded-md">
@@ -616,7 +604,7 @@ const Dashboard = () => {
             </div>
 
             <div className="px-8 py-7">
-              {/* Metrics */}
+              {}
               <div className="grid grid-cols-3 gap-6 mb-7 pb-7 border-b border-soc-border">
                 <div>
                   <p className="text-[9px] font-bold uppercase tracking-widest text-slate-400 mb-2">Final Score</p>
@@ -640,7 +628,7 @@ const Dashboard = () => {
                 </div>
               </div>
 
-              {/* Persona scores */}
+              {}
               <div className="bg-slate-50 border border-soc-border rounded-md p-5 mb-6">
                 <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-4">
                   Multi-Persona Evaluation
@@ -661,7 +649,7 @@ const Dashboard = () => {
                 </div>
               </div>
 
-              {/* Actions */}
+              {}
               <div className="flex gap-3">
                 <button
                   onClick={() => handleReset()}

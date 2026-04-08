@@ -1,9 +1,9 @@
-"""
-server.py — AutoSec API Gateway
-===============================
-FastAPI server that manages the simulation lifecycle.
-Provides endpoints for reset, step, state, and result.
-"""
+\
+\
+\
+\
+\
+   
 
 from fastapi import FastAPI, HTTPException, Body
 from fastapi.middleware.cors import CORSMiddleware
@@ -15,16 +15,16 @@ from autosec_openenv.models import Action
 
 app = FastAPI(title="AutoSec OpenEnv API")
 
-# --- CORS CONFIGURATION ---
+                            
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"], # For simulation: allow all
+    allow_origins=["*"],                            
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Singleton Environment Instance
+                                
 _env: Optional[SimulationEnvironment] = None
 
 class ResetRequest(BaseModel):
@@ -37,7 +37,7 @@ async def root():
 
 @app.post("/v1/reset")
 async def reset(req: ResetRequest = Body(...)):
-    """Reset the simulation environment."""
+                                           
     global _env
     _env = SimulationEnvironment(task_id=req.task_id)
     obs, info = _env.reset()
@@ -48,7 +48,7 @@ async def reset(req: ResetRequest = Body(...)):
 
 @app.post("/v1/step")
 async def step(payload: Dict[str, Any] = Body(...)):
-    """Execute a defender action in the environment."""
+                                                       
     global _env
     if _env is None:
         raise HTTPException(status_code=400, detail="Environment not initialized. Call /v1/reset first.")
@@ -72,22 +72,22 @@ async def step(payload: Dict[str, Any] = Body(...)):
 
 @app.get("/v1/state")
 async def get_state():
-    """Get the current environmental state (full visibility)."""
+                                                                
     global _env
     if _env is None:
         return {"status": "INACTIVE"}
     
-    # Return structure compatible with the Dashboard's expectations
+                                                                   
     return {
         "system_state": _env.state(),
-        "logs": [log.model_dump() for log in _env.logs[-10:]], # Latest 10 logs
+        "logs": [log.model_dump() for log in _env.logs[-10:]],                 
         "last_attacker_action": _env.last_attacker_action,
         "step_id": _env.step_id
     }
 
 @app.get("/v1/result")
 async def get_result():
-    """Get final episode grade."""
+                                  
     global _env
     if _env is None:
         raise HTTPException(status_code=400, detail="No result available. Call /v1/reset first.")

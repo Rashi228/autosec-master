@@ -1,15 +1,15 @@
-"""
-war_room.py — Interactive SOC War Room Demo
-============================================
-Runs a live cinematic simulation of the SOC in action.
-Shows Red Team (Attacker) vs Blue Team (Defender) in real-time.
-
-Usage:
-    python war_room.py                        # task_hard (default)
-    python war_room.py --task task_easy
-    python war_room.py --task task_medium
-    python war_room.py --task task_hard
-"""
+\
+\
+\
+\
+\
+\
+\
+\
+\
+\
+\
+   
 
 import os
 import sys
@@ -44,14 +44,14 @@ def run_war_room(task_id: str):
     print("      Blue Team (Defender) vs Red Team (Attacker)")
     print("═" * 62 + "\n")
 
-    # Import the high-performance hybrid decision system from inference.py
+                                                                          
     try:
         from inference import _decide_action, ppo_model
     except ImportError as e:
         print(f"❌ Could not import brain from inference.py: {e}")
         sys.exit(1)
 
-    # Reset environment
+                       
     print(f"[*] Initializing War Room: {task_id} | MaxSteps: {MAX_STEPS}")
     reset_resp = requests.post(
         f"{ENV_BASE_URL}/v1/reset",
@@ -79,7 +79,7 @@ def run_war_room(task_id: str):
         "rewards":       [],
     }
 
-    # ── Episode Loop ──────────────────────────────────────────────────────────
+                                                                                
     while not done and step < MAX_STEPS:
         step += 1
 
@@ -87,7 +87,7 @@ def run_war_room(task_id: str):
         print(f"  ROUND {step:02d}/{MAX_STEPS}  |  Active Threats: {obs.num_active_threats}  |  Impact: {obs.impact_score:.2f}")
         print(f"{'─' * 62}")
 
-        # ── Red Team ─────────────────────────────────────────────────────────
+                                                                               
         env_state      = requests.get(f"{ENV_BASE_URL}/v1/state").json()
         attacker_move  = env_state.get("last_attacker_action")
 
@@ -99,24 +99,24 @@ def run_war_room(task_id: str):
         else:
             print(f"\n  🔴 RED TEAM  : Initializing reconnaissance...")
 
-        # ── Log Stream ───────────────────────────────────────────────────────
+                                                                               
         logs  = obs.logs
         stage = detect_stage(logs)
         print(f"\n  📊 LOG STREAM  — Kill Chain: {stage.value.upper()}")
 
-        for log in logs[-6:]:  # Show last 6 logs
+        for log in logs[-6:]:                    
             sev    = str(log.severity).upper().split(".")[-1]
             icon   = SEVERITY_COLOR.get(sev, "⚪")
             flag   = "⚠ MALICIOUS" if log.is_malicious else "  benign "
             print(f"     {icon} {flag} | {str(log.event_type):<28} | src={log.source_ip or 'internal'}")
 
-        # ── Blue Team Decision (Triple Hybrid Brain) ─────────────────────────
+                                                                               
         print(f"\n  🔵 BLUE TEAM ANALYZING...")
-        time.sleep(0.6)  # Cinematic pause
+        time.sleep(0.6)                   
 
         action_dict, source_id = _decide_action(step, obs, last_feedback, action_history, telemetry)
 
-        # Mapping for War Room Icons
+                                    
         source_map = {
             "LLM":    "LLM 🧠",
             "PPO":    "PPO 🤖",
@@ -128,7 +128,7 @@ def run_war_room(task_id: str):
         target  = action_dict["target"]
         reason  = action_dict.get("reasoning", "Executing defensive maneuver.")
 
-        # Track history for the brain's internal redundancy checks
+                                                                  
         action_history.append((act_str, target))
 
         print(f"     Source    : {source_label}")
@@ -136,7 +136,7 @@ def run_war_room(task_id: str):
         print(f"     Target    : {target}")
         print(f"     Reasoning : {reason}")
 
-        # ── Submit Action ─────────────────────────────────────────────────────
+                                                                                
         step_resp = requests.post(
             f"{ENV_BASE_URL}/v1/step",
             json={"action": action_dict}
@@ -159,7 +159,7 @@ def run_war_room(task_id: str):
         reward_val    = max(0.0, min(1.0, float(reward_data.get("value", 0.0))))
         total_reward += reward_val
 
-        # ── Outcome ───────────────────────────────────────────────────────────
+                                                                                
         bar_filled = int(reward_val * 20)
         bar        = "█" * bar_filled + "░" * (20 - bar_filled)
         print(f"\n  💰 OUTCOME")
@@ -170,7 +170,7 @@ def run_war_room(task_id: str):
         if done:
             print(f"\n  ✅ Environment signalled DONE at step {step}")
 
-        # Save to memory (New Synced Variables)
+                                               
         log_text = "\n".join([str(l) for l in obs.logs])
         memory.save_experience(Experience(
             state_summary=log_text[:200],
@@ -184,9 +184,9 @@ def run_war_room(task_id: str):
             kill_chain_stage=stage.value
         ))
 
-        time.sleep(1.2)  # Pacing for readability
+        time.sleep(1.2)                          
 
-    # ── Final Result ──────────────────────────────────────────────────────────
+                                                                                
     print(f"\n{'═' * 62}")
     print("  🏁  WAR ROOM CONCLUDED")
     print(f"{'═' * 62}")

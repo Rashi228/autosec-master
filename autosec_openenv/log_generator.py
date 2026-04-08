@@ -1,9 +1,9 @@
-"""
-log_generator.py — Security Log Simulator
-==========================================
-Generates realistic security logs based on attacker 
-and benign activity in the simulation.
-"""
+\
+\
+\
+\
+\
+   
 
 from typing import List, Dict, Any
 from datetime import datetime
@@ -13,10 +13,10 @@ import random
 from autosec_openenv.models import SecurityLog, Severity, EventType, AttackAction
 
 def generate_malicious_log(attack: AttackAction, step_id: int) -> SecurityLog:
-    """
-    Transforms an attack action into a high-fidelity security log.
-    Now supports realistic severity scaling.
-    """
+\
+\
+\
+       
     event_type_map = {
         "BRUTE_FORCE": EventType.FAILED_LOGIN,
         "SUCCESSFUL_LOGIN": EventType.SUCCESSFUL_LOGIN,
@@ -27,7 +27,7 @@ def generate_malicious_log(attack: AttackAction, step_id: int) -> SecurityLog:
     
     event_type = event_type_map.get(str(attack.attack_type), EventType.MALWARE_EXECUTION)
     
-    # Realistic Severity Logic
+                              
     severity = Severity.MEDIUM
     if event_type in [EventType.DATA_EXFILTRATION, EventType.PRIVILEGE_ESCALATION]:
         severity = Severity.CRITICAL
@@ -47,16 +47,16 @@ def generate_malicious_log(attack: AttackAction, step_id: int) -> SecurityLog:
     )
 
 def generate_benign_logs(hosts: List[str], ip_map: Dict[str, str], count: int = 1, noisy: bool = False) -> List[SecurityLog]:
-    """
-    Generates normal system noise.
-    If noisy=True, generates 'False Alarms' (e.g. valid password resets, scan-like heartbeats).
-    """
+\
+\
+\
+       
     logs = []
     for _ in range(count):
         host = random.choice(hosts)
         
         if noisy and random.random() > 0.5:
-            # Generate a 'Noisy' False Positive
+                                               
             e_type = random.choice([EventType.FAILED_LOGIN, EventType.PORT_SCAN])
             raw = f"Audit Failure: {e_type.value} during automated maintenance on {host}"
             severity = Severity.MEDIUM

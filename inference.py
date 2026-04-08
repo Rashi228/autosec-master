@@ -1,17 +1,17 @@
-"""
-inference.py — Hybrid Defender Brain: Smart Policy + Selective LLM
-===================================================================
-Architecture:
-  - Steps 1, 3, 5... → Smart Deterministic Policy (always runs, never fails)
-  - Steps 2, 4, 6... → LLM Enhancement (called every LLM_CALL_INTERVAL steps)
-  - LLM failure      → Seamless fallback to deterministic policy, logged
-  - All episodes complete reliably, independent of API credit status
-
-Usage:
-    python inference.py                   # task_hard (default)
-    python inference.py task_easy
-    python inference.py task_medium
-"""
+\
+\
+\
+\
+\
+\
+\
+\
+\
+\
+\
+\
+\
+   
 
 import os
 import sys
@@ -39,19 +39,19 @@ from autosec_openenv.models import (
 from autosec_openenv.memory import ExperienceMemory, Experience
 from autosec_openenv.kill_chain import detect_stage, STAGE_PRIORITY
 
-# ─────────────────────────────────────────────────────────────────────────────
-# MODEL METADATA (Neural Brain Fixed Mappings)
-# ─────────────────────────────────────────────────────────────────────────────
-# Note: These indices are fixed for the current PPO model version. 
-# Do not reorder without retraining the model.
+                                                                               
+                                              
+                                                                               
+                                                                   
+                                              
 PPO_STRATEGIES = ["DETECT", "INVESTIGATE", "CONTAIN", "REMEDIATE"]
 PPO_TACTICS    = ["INSPECT_LOGS", "ISOLATE_HOST", "BLOCK_IP", "TERMINATE_PROCESS", "NO_ACTION"]
 PPO_HOSTNAMES  = ["web-prod-01", "db-server-01", "dc-01", "hr-laptop-12", "dev-pc-04"]
 PPO_TARGETS    = PPO_HOSTNAMES + ["attacker_ip"]
 
-# ─────────────────────────────────────────────────────────────────────────────
-# CONFIGURATION
-# ─────────────────────────────────────────────────────────────────────────────
+                                                                               
+               
+                                                                               
 load_dotenv()
 
 ENV_BASE_URL       = os.getenv("ENV_BASE_URL",       "http://localhost:7860")
@@ -60,20 +60,20 @@ API_BASE_URL       = os.getenv("API_BASE_URL",       "https://router.huggingface
 MAX_STEPS          = int(os.getenv("MAX_STEPS",      "15"))
 MAX_TOKENS         = int(os.getenv("MAX_TOKENS",     "256"))
 TEMPERATURE        = float(os.getenv("TEMPERATURE",  "0.0"))
-LLM_CALL_INTERVAL  = int(os.getenv("LLM_INTERVAL",    "3"))   # LLM called every N steps
+LLM_CALL_INTERVAL  = int(os.getenv("LLM_INTERVAL",    "3"))                             
 RANDOM_SEED        = int(os.getenv("RANDOM_SEED",     "42"))
-ALLOW_FALLBACK     = os.getenv("ALLOW_FALLBACK",      "true").lower() == "true"  # False = strict eval
+ALLOW_FALLBACK     = os.getenv("ALLOW_FALLBACK",      "true").lower() == "true"                       
 TOP_P              = float(os.getenv("TOP_P",          "1.0"))
 
-# Fix global seed for reproducibility
+                                     
 random.seed(RANDOM_SEED)
 
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"), base_url=API_BASE_URL)
 memory = ExperienceMemory()
 
-# ─────────────────────────────────────────────────────────────────────────────
-# LOGGING
-# ─────────────────────────────────────────────────────────────────────────────
+                                                                               
+         
+                                                                               
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s | %(levelname)s | %(message)s",
@@ -81,12 +81,12 @@ logging.basicConfig(
 )
 logger = logging.getLogger("autosec")
 
-# 4. Continuous Learning Options
+                                
 ONLINE_LEARNING    = os.getenv("ONLINE_LEARNING",     "false").lower() == "true"
 LEARNING_THRESHOLD = float(os.getenv("LEARNING_THRESHOLD", "0.75"))
 PPO_MODEL_PATH     = os.getenv("PPO_MODEL_PATH",      "./logs/rl_training/autosec_ppo_final.zip")
 
-# 5. Load PPO Brain
+                   
 ppo_model = None
 if PPO is not None and os.path.exists(PPO_MODEL_PATH):
     try:
@@ -97,9 +97,9 @@ if PPO is not None and os.path.exists(PPO_MODEL_PATH):
 else:
     logger.warning("PPO Brain (stable-baselines3) not found. Fallback to POLICY only.")
 
-# ─────────────────────────────────────────────────────────────────────────────
-# SEVERITY PRIORITY MAP (for threat prioritization)
-# ─────────────────────────────────────────────────────────────────────────────
+                                                                               
+                                                   
+                                                                               
 SEVERITY_SCORE = {
     "CRITICAL": 4,
     "HIGH":     3,
@@ -110,20 +110,20 @@ SEVERITY_SCORE = {
 
 CRITICAL_HOSTS = {"dc-01", "db-server-01", "web-prod-01"}
 
-# ─────────────────────────────────────────────────────────────────────────────
-# SMART DETERMINISTIC POLICY
-# ─────────────────────────────────────────────────────────────────────────────
+                                                                               
+                            
+                                                                               
 def _smart_policy(obs: Observation, history: List[Tuple[str, str]]) -> Action:
-    """
-    Priority-based deterministic policy. Always produces a valid, non-redundant action.
-
-    Priority order:
-    1. Block highest-severity external attacker IPs not yet blocked
-    2. Isolate critical infrastructure hosts under attack
-    3. Isolate any compromised host not yet isolated
-    4. Terminate processes on compromised non-isolated hosts
-    5. Monitor (if no threats)
-    """
+\
+\
+\
+\
+\
+\
+\
+\
+\
+       
     history_set = set(history)
 
     sys_state = (
@@ -142,14 +142,14 @@ def _smart_policy(obs: Observation, history: List[Tuple[str, str]]) -> Action:
             reasoning="Smart Policy: No active threats detected."
         )
 
-    # Sort malicious logs by severity descending
+                                                
     malicious_logs = sorted(
         malicious_logs,
         key=lambda l: SEVERITY_SCORE.get(str(l.severity).upper().split(".")[-1], 0),
         reverse=True
     )
 
-    # 1. Block external attacker IPs (highest severity first)
+                                                             
     for log in malicious_logs:
         ip = log.source_ip
         if (ip and ip not in already_blocked
@@ -160,7 +160,7 @@ def _smart_policy(obs: Observation, history: List[Tuple[str, str]]) -> Action:
                 reasoning=f"Smart Policy: Block attacker IP {ip} [{log.severity}]."
             )
 
-    # 2. Isolate critical hosts first
+                                     
     for log in malicious_logs:
         host = log.hostname
         if (host and host in CRITICAL_HOSTS
@@ -172,7 +172,7 @@ def _smart_policy(obs: Observation, history: List[Tuple[str, str]]) -> Action:
                 reasoning=f"Smart Policy: Isolate critical host {host} [{log.severity}]."
             )
 
-    # 3. Isolate any compromised host
+                                     
     for log in malicious_logs:
         host = log.hostname
         if (host and host not in already_isolated
@@ -183,7 +183,7 @@ def _smart_policy(obs: Observation, history: List[Tuple[str, str]]) -> Action:
                 reasoning=f"Smart Policy: Isolate compromised host {host}."
             )
 
-    # 4. Terminate processes (last resort before no-action)
+                                                           
     for log in malicious_logs:
         host = log.hostname
         if host and ("TERMINATE_PROCESS", host) not in history_set:
@@ -193,7 +193,7 @@ def _smart_policy(obs: Observation, history: List[Tuple[str, str]]) -> Action:
                 reasoning=f"Smart Policy: Terminate malicious process on {host}."
             )
 
-    # 5. No novel action available
+                                  
     return Action(
         action_type=ActionType.MONITOR,
         target="none",
@@ -201,9 +201,9 @@ def _smart_policy(obs: Observation, history: List[Tuple[str, str]]) -> Action:
     )
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# LLM SYSTEM PROMPT
-# ─────────────────────────────────────────────────────────────────────────────
+                                                                               
+                   
+                                                                               
 _SYSTEM_PROMPT = """You are an autonomous SOC security engineer.
 
 VALID action_type values (use EXACTLY one):
@@ -222,14 +222,14 @@ Respond with ONLY this JSON (no extra text):
 
 
 def _build_llm_prompt(obs: Observation, feedback: str, history: List[Tuple[str, str]]) -> str:
-    """Minimal, token-efficient prompt for the LLM."""
+                                                      
     sys_state = (
         obs.system_state
         if isinstance(obs.system_state, dict)
         else obs.system_state.model_dump()
     )
     log_lines = ""
-    for log in obs.logs[-8:]:  # Limit to 8 most recent logs
+    for log in obs.logs[-8:]:                               
         flag = "MALICIOUS" if log.is_malicious else "benign"
         log_lines += f"  [{flag}] {log.event_type} | host={log.hostname} | src={log.source_ip} | sev={log.severity}\n"
 
@@ -243,14 +243,14 @@ Logs:
 {log_lines}"""
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# LLM CALL (Optional Enhancement — never crashes episode)
-# ─────────────────────────────────────────────────────────────────────────────
+                                                                               
+                                                         
+                                                                               
 def _try_llm_action(obs: Observation, feedback: str, history: List[Tuple[str, str]]) -> Optional[Action]:
-    """
-    Attempts an LLM-guided action. Returns None on any failure.
-    Caller seamlessly falls back to smart policy on None return.
-    """
+\
+\
+\
+       
     try:
         response = client.chat.completions.create(
             model=MODEL_NAME,
@@ -261,7 +261,7 @@ def _try_llm_action(obs: Observation, feedback: str, history: List[Tuple[str, st
             response_format={"type": "json_object"},
             temperature=TEMPERATURE,
             max_tokens=MAX_TOKENS,
-            top_p=TOP_P,        # determinism: 1.0 = no nucleus sampling restriction
+            top_p=TOP_P,                                                            
         )
 
         raw = json.loads(response.choices[0].message.content)
@@ -269,7 +269,7 @@ def _try_llm_action(obs: Observation, feedback: str, history: List[Tuple[str, st
         target    = str(raw.get("target", "none")).strip()
         reasoning = str(raw.get("reasoning", "LLM action."))
 
-        # Validate enum
+                       
         valid_types = {e.value for e in ActionType}
         if atype_str not in valid_types:
             logger.warning(f"LLM returned invalid action_type '{atype_str}' — discarding.")
@@ -283,7 +283,7 @@ def _try_llm_action(obs: Observation, feedback: str, history: List[Tuple[str, st
         blocked  = set(sys_state.get("blocked_ips",    []) or [])
         isolated = set(sys_state.get("isolated_hosts", []) or [])
 
-        # Reject low-quality responses
+                                      
         if obs.num_active_threats > 0:
             if atype_str in ("NO_ACTION", "MONITOR"):
                 logger.warning("LLM chose passive action during active threat — discarding.")
@@ -291,10 +291,10 @@ def _try_llm_action(obs: Observation, feedback: str, history: List[Tuple[str, st
             if target in ("none", "", "null") and atype_str in ("BLOCK_IP", "ISOLATE_HOST", "TERMINATE_PROCESS"):
                 logger.warning(f"LLM gave empty target for {atype_str} — discarding.")
                 return None
-            # Redirect redundant actions to next-best rather than hard failing
+                                                                              
             if atype_str == "BLOCK_IP" and target in blocked:
                 logger.info(f"LLM wants to re-block {target} — redirecting to ISOLATE_HOST.")
-                # Try isolating the hostname associated with this IP from logs
+                                                                              
                 for log in obs.logs:
                     if log.source_ip == target and log.hostname and log.hostname not in isolated:
                         return Action(
@@ -302,7 +302,7 @@ def _try_llm_action(obs: Observation, feedback: str, history: List[Tuple[str, st
                             target=log.hostname,
                             reasoning=f"Redirected: isolating {log.hostname} (source IP already blocked)."
                         ).model_dump()
-                return None  # No valid redirect available
+                return None                               
             if atype_str == "ISOLATE_HOST" and target in isolated:
                 logger.info(f"LLM wants to re-isolate {target} — discarding.")
                 return None
@@ -314,14 +314,14 @@ def _try_llm_action(obs: Observation, feedback: str, history: List[Tuple[str, st
         return None
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# PPO TRANSFORMS & DECISION
-# ─────────────────────────────────────────────────────────────────────────────
+                                                                               
+                           
+                                                                               
 def _transform_obs_for_ppo(obs: Observation) -> np.ndarray:
-    """
-    Transforms raw Observation into the 15-feature space expected by the PPO model.
-    Matches the logic in backend/rl/env_wrapper.py.
-    """
+\
+\
+\
+       
     sys_state = (
         obs.system_state if isinstance(obs.system_state, dict)
         else obs.system_state.model_dump()
@@ -329,7 +329,7 @@ def _transform_obs_for_ppo(obs: Observation) -> np.ndarray:
     vec = [
         float(sys_state.get("compromise_level", 0) / 100.0),
         float(obs.num_active_threats / 5.0),
-        float(obs.step_id / 30.0) # Matches AutoSecGymEnv normalization
+        float(obs.step_id / 30.0)                                      
     ]
     
     malicious_hosts = {log.hostname for log in obs.logs if log.is_malicious}
@@ -349,10 +349,10 @@ def _transform_obs_for_ppo(obs: Observation) -> np.ndarray:
     return np.array(vec, dtype=np.float32)
 
 def _try_ppo_action(obs: Observation, history: List[Tuple[str, str]]) -> Optional[dict]:
-    """
-    Uses the learned PPO brain to predict the next reflexive action.
-    Also calculates a confidence score (mean probability) for routing.
-    """
+\
+\
+\
+       
     if not ppo_model:
         return None
         
@@ -360,7 +360,7 @@ def _try_ppo_action(obs: Observation, history: List[Tuple[str, str]]) -> Optiona
         vec = _transform_obs_for_ppo(obs)
         action_multi, _states = ppo_model.predict(vec, deterministic=False)
         
-        # Calculate Confidence & extract target distribution
+                                                            
         obs_tensor, _ = ppo_model.policy.obs_to_tensor(vec)
         confidence = 1.0
         with torch.no_grad():
@@ -368,11 +368,11 @@ def _try_ppo_action(obs: Observation, history: List[Tuple[str, str]]) -> Optiona
             probs = [dist.probs.max().item() for dist in distribution.distribution]
             confidence = sum(probs) / len(probs)
             
-            # Extract target distribution for Top-K fallback
+                                                            
             target_dist = distribution.distribution[2].probs[0]
             top_k_targets = torch.topk(target_dist, min(3, len(target_dist))).indices.tolist()
 
-        # Context Awareness: Override if no threat
+                                                  
         has_active_threat = obs.num_active_threats > 0 or any(l.is_malicious for l in obs.logs)
         if not has_active_threat:
             return Action(
@@ -394,7 +394,7 @@ def _try_ppo_action(obs: Observation, history: List[Tuple[str, str]]) -> Optiona
         history_set = set(history)
         action_dict = None
         
-        # Redundancy Awareness via Top-K sampling (max 3 attempts)
+                                                                  
         for attempt, target_idx in enumerate(top_k_targets):
             target = PPO_TARGETS[target_idx]
             a_type = ActionType.MONITOR
@@ -403,13 +403,13 @@ def _try_ppo_action(obs: Observation, history: List[Tuple[str, str]]) -> Optiona
             elif tactic == "BLOCK_IP":  a_type = ActionType.BLOCK_IP
             elif tactic == "TERMINATE_PROCESS": a_type = ActionType.TERMINATE_PROCESS
             
-            # Resolve 'attacker_ip' abstraction
+                                               
             if target == "attacker_ip":
                 mal_ips = [l.source_ip for l in obs.logs if l.is_malicious and l.source_ip]
                 if mal_ips: target = mal_ips[-1]
                 else: continue
                 
-            # Action Validation Layer (Strict Mapping & Auto-Correct)
+                                                                     
             is_ip = "." in target or (target and target[0].isdigit())
             if a_type == ActionType.ISOLATE_HOST and is_ip:
                 logger.info(f"🛡️ [PPO_ADJUST] Corrected ISOLATE_HOST on IP {target} to BLOCK_IP.")
@@ -420,7 +420,7 @@ def _try_ppo_action(obs: Observation, history: List[Tuple[str, str]]) -> Optiona
                 a_type = ActionType.ISOLATE_HOST
                 tactic = "ISOLATE_HOST"
                 
-            # Redundancy Check
+                              
             act_tup = (a_type.value.split(".")[-1], target)
             if act_tup in history_set:
                 if attempt < len(top_k_targets) - 1:
@@ -445,9 +445,9 @@ def _try_ppo_action(obs: Observation, history: List[Tuple[str, str]]) -> Optiona
         return None
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# HYBRID DECISION (Triple Hybrid)
-# ─────────────────────────────────────────────────────────────────────────────
+                                                                               
+                                 
+                                                                               
 def _decide_action(
     step: int,
     obs: Observation,
@@ -455,14 +455,14 @@ def _decide_action(
     history: List[Tuple[str, str]],
     telemetry: dict
 ) -> Tuple[dict, str]:
-    """
-    The Triple Hybrid Decision Loop:
-    1. LLM Strategy (every LLM_CALL_INTERVAL)
-    2. PPO Instinct (Learned Neural Reflex)
-    3. Smart Policy (Deterministic Safety Net)
-    """
+\
+\
+\
+\
+\
+       
     
-    # 1. STRATEGIC LAYER: LLM
+                             
     use_llm = (step % LLM_CALL_INTERVAL == 0)
     if use_llm:
         telemetry["llm_attempts"] += 1
@@ -482,13 +482,13 @@ def _decide_action(
             if not ALLOW_FALLBACK:
                 return None, "ABORT"
 
-    # 2. INSTINCT LAYER: PPO
+                            
     ppo_action = _try_ppo_action(obs, history)
     if ppo_action:
         act_tup = (ppo_action["action_type"].upper().split(".")[-1], ppo_action["target"])
         confidence = ppo_action.get("confidence", 1.0)
         
-        # PPO Confidence Routing: If hesitant, request Strategic Review
+                                                                       
         if confidence < 0.40:
             logger.info(f"⚠️ [PPO_HESITANT] Confidence {confidence:.2f} < 0.40. Triggering LLM Selective Review...")
             llm_review = _try_llm_action(obs, feedback, history)
@@ -504,19 +504,19 @@ def _decide_action(
         else:
             return ppo_action, "PPO"
 
-    # 3. SAFETY LAYER: Smart Policy
+                                   
     policy_action = _smart_policy(obs, history)
     return policy_action.model_dump(), "POLICY"
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# MAIN EPISODE LOOP
-# ─────────────────────────────────────────────────────────────────────────────
+                                                                               
+                   
+                                                                               
 def run_episode(task_id: str = "task_hard") -> Optional[dict]:
-    """
-    Runs a full evaluation episode. Always completes — never aborts on LLM failure.
-    Returns structured result with bounded final_grader_score ∈ [0.0, 1.0].
-    """
+\
+\
+\
+       
     telemetry = {
         "llm_attempts":  0,
         "llm_successes": 0,
@@ -532,7 +532,7 @@ def run_episode(task_id: str = "task_hard") -> Optional[dict]:
           f"Seed: {RANDOM_SEED}")
 
     try:
-        # ── Reset environment ─────────────────────────────────────────────
+                                                                            
         reset_resp = requests.post(
             f"{ENV_BASE_URL}/v1/reset",
             json={"task_id": task_id}
@@ -547,13 +547,13 @@ def run_episode(task_id: str = "task_hard") -> Optional[dict]:
         last_feedback  = ""
         action_history: List[Tuple[str, str]] = []
 
-        # ── Episode Loop ──────────────────────────────────────────────────
+                                                                            
         while not done and step < MAX_STEPS:
             step += 1
 
             action, source = _decide_action(step, obs, last_feedback, action_history, telemetry)
 
-            # Handle abort (ALLOW_FALLBACK=False + LLM failure)
+                                                               
             if source == "ABORT" or action is None:
                 print(f"[ABORT] Episode terminated at step {step} (LLM failure, no fallback).")
                 print(f"[END] Final Score: 0.0000 | Result: Aborted at step {step}")
@@ -565,28 +565,28 @@ def run_episode(task_id: str = "task_hard") -> Optional[dict]:
             elif source == "PPO":
                 telemetry["ppo_steps"].append(step)
 
-            # Track history
+                           
             act_str = str(action["action_type"]).split(".")[-1].upper()
             action_history.append((act_str, action["target"]))
 
-            # Anti-Overreaction Guard: Critical Asset Isolation Protection
+                                                                          
             is_over_isolation = False
             critical_assets = ["dc-01", "db-server-01", "web-prod-01"]
             if act_str == "ISOLATE_HOST" and action["target"] in critical_assets:
                 current_killchain = detect_stage(obs.logs)
                 priority = STAGE_PRIORITY.get(current_killchain, 0)
-                # Block if very early (Recon/Initial Access), penalize if Lateral
+                                                                                 
                 if priority < 4:
                     is_over_isolation = True
                     if priority < 2:
                         logger.warning(f"🛡️ [OVERREACTION_GUARD] Blocking premature isolation of {action['target']} at {current_killchain} stage.")
-                        # Force fallback to POLICY for safety
+                                                             
                         action_obj = _smart_policy(obs, action_history)
                         action = action_obj.model_dump()
                         act_str = str(action["action_type"]).split(".")[-1].upper()
                         source = "POLICY_GUARD"
 
-            # Action Validation Layer (Non-breaking alignment check)
+                                                                    
             is_ip_mismatch = False
             target = action["target"]
             is_ip = "." in target or (target and target[0].isdigit())
@@ -595,7 +595,7 @@ def run_episode(task_id: str = "task_hard") -> Optional[dict]:
             elif act_str == "ISOLATE_HOST" and is_ip:
                 is_ip_mismatch = True
 
-            # Execute step
+                          
             step_resp = requests.post(
                 f"{ENV_BASE_URL}/v1/step",
                 json={
@@ -622,7 +622,7 @@ def run_episode(task_id: str = "task_hard") -> Optional[dict]:
 
             telemetry["rewards"].append(reward_val)
 
-            # [STEP] — Show full explainability: What, Where, and WHY
+                                                                     
             reasoning = action.get("reasoning", "No explanation.")
             ppo_confidence = action.get("confidence")
             
@@ -635,7 +635,7 @@ def run_episode(task_id: str = "task_hard") -> Optional[dict]:
                 print(f"       ↳ PPO_CONFIDENCE: {ppo_confidence:.2f}")
             print(f"       ↳ EXPLAIN: {reasoning}")
 
-            # Persist to memory
+                               
             log_text = "\n".join([str(l) for l in obs.logs])
             memory.save_experience(Experience(
                 state_summary=log_text[:200],
@@ -649,7 +649,7 @@ def run_episode(task_id: str = "task_hard") -> Optional[dict]:
                 kill_chain_stage=detect_stage(obs.logs).value
             ))
 
-        # ── Fetch Final Score ─────────────────────────────────────────────
+                                                                            
         result = requests.get(f"{ENV_BASE_URL}/v1/result").json()
         score  = float(max(0.0, min(1.0, result.get("final_grader_score", 0.0))))
         summary = result.get("summary", "N/A")
@@ -675,11 +675,11 @@ def run_episode(task_id: str = "task_hard") -> Optional[dict]:
         return None
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# TELEMETRY REPORT
-# ─────────────────────────────────────────────────────────────────────────────
+                                                                               
+                  
+                                                                               
 def _log_telemetry(t: dict, total_steps: int):
-    """Prints structured transparency telemetry after every episode."""
+                                                                       
     llm_att  = t["llm_attempts"]
     llm_ok   = t["llm_successes"]
     ppo_s    = len(t["ppo_steps"])
@@ -693,18 +693,18 @@ def _log_telemetry(t: dict, total_steps: int):
           f"PPO_Steps={ppo_s} | Policy_Steps={pol_s} | AvgReward={avg_r}")
 
 def _trigger_online_learning(model, history, final_score):
-    """
-    Lightweight online fine-tuning for PPO.
-    In a real production environment, this would push to a centralized training queue.
-    Here, we simulate by doing a mini-learn pass on the successful trajectories.
-    """
+\
+\
+\
+\
+       
     if model is None: return
     
     print(f"🎓 [LEARNING] High score ({final_score:.2f}) detected. Performing online policy refinement...")
     try:
-        # PPO learn usually takes an env, so we perform a short fine-tune 
-        # using the current experience buffer which contains the successful moves.
-        # This is a 'soft' implementation of continuous learning.
+                                                                          
+                                                                                  
+                                                                 
         model.learn(total_timesteps=100, reset_num_timesteps=False)
         model.save(PPO_MODEL_PATH)
         print(f"💾 [SAVED] Neural Brain updated and synchronized with {PPO_MODEL_PATH}")
@@ -721,18 +721,18 @@ def _trigger_online_learning(model, history, final_score):
     )
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# ENTRY POINT
-# ─────────────────────────────────────────────────────────────────────────────
+                                                                               
+             
+                                                                               
 if __name__ == "__main__":
     task = "task_hard"
     for arg in sys.argv[1:]:
         if arg in ("task_easy", "task_medium", "task_hard"):
             task = arg
     run_episode(task)
-# ─────────────────────────────────────────────────────────────────────────────
-# ENTRY POINT
-# ─────────────────────────────────────────────────────────────────────────────
+                                                                               
+             
+                                                                               
 if __name__ == "__main__":
     task = "task_hard"
     for arg in sys.argv[1:]:

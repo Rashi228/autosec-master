@@ -1,8 +1,8 @@
-"""
-train_rl.py — Train PPO Agent for AutoSec
-=========================================
-Training script using Stable-Baselines3 to train an RL SOC agent.
-"""
+\
+\
+\
+\
+   
 
 import os
 import time
@@ -15,13 +15,13 @@ def main():
     print("Initializing AutoSec RL Training Environment...")
     env_id = lambda: AutoSecGymEnv(task_id="train_01")
     
-    # Vectorized environment for faster execution (using 4 parallel envs)
+                                                                         
     vec_env = make_vec_env(env_id, n_envs=4)
     
-    # Eval environment
+                      
     eval_env = AutoSecGymEnv(task_id="eval_01")
     
-    # Setup Checkpointing & Logs
+                                
     log_dir = "./logs/rl_training/"
     os.makedirs(log_dir, exist_ok=True)
     
@@ -34,7 +34,7 @@ def main():
         render=False
     )
     
-    # Initialize PPO Agent with high entropy for discovery and low LR for stability
+                                                                                   
     model = PPO("MlpPolicy", vec_env, verbose=1, 
                 learning_rate=0.00005, ent_coef=0.1, gamma=0.99,
                 tensorboard_log=log_dir)
@@ -42,12 +42,12 @@ def main():
     print("Starting PPO Training for 200,000 steps (Curriculum Enabled)...")
     start_time = time.time()
     
-    # Simple Curriculum: First 40k steps with 1 threat only to learn mapping
+                                                                            
     print("[CURRICULUM] Phase 1: Target Discovery (Threats limited to 1)")
     vec_env.env_method("set_threat_capacity", 1)
     model.learn(total_timesteps=40000, callback=eval_callback)
     
-    # Phase 2: Multi-threat handling
+                                    
     print("[CURRICULUM] Phase 2: Multi-Threat Defense (Full Capacity)")
     vec_env.env_method("set_threat_capacity", 3)
     model.learn(total_timesteps=160000, callback=eval_callback)
@@ -55,7 +55,7 @@ def main():
     end_time = time.time()
     print(f"Training completed in {end_time - start_time:.2f} seconds.")
     
-    # Save the final model
+                          
     model.save(f"{log_dir}/autosec_ppo_final")
 
 if __name__ == "__main__":

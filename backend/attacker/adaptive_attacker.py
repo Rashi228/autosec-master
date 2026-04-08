@@ -1,8 +1,8 @@
-"""
-adaptive_attacker.py — Dynamic Adversarial Engine
-=================================================
-Attacker that modifies its strategy based on the agent's failure patterns.
-"""
+\
+\
+\
+\
+   
 
 import random
 from typing import List, Optional
@@ -14,7 +14,7 @@ class AdaptiveAttacker:
         self.compromised_hosts = set()
         self.source_ip = f"194.165.{random.randint(1,254)}.{random.randint(1,254)}"
         
-        # Adaptive tracking
+                           
         self.agent_failures = {
             "missed_brute_force": 0,
             "missed_lateral": 0,
@@ -22,7 +22,7 @@ class AdaptiveAttacker:
         }
 
     def register_agent_failure(self, failure_type: str):
-        """Called when the agent fails to block an attack."""
+                                                             
         if failure_type in self.agent_failures:
             self.agent_failures[failure_type] += 1
 
@@ -34,7 +34,7 @@ class AdaptiveAttacker:
         if not available_targets:
             return None
 
-        # Probabilistic attack selection based on agent weaknesses
+                                                                  
         weights = [
             1.0 + self.agent_failures["missed_brute_force"],
             1.0 + self.agent_failures["missed_lateral"],
@@ -52,7 +52,7 @@ class AdaptiveAttacker:
             )
 
         if len(self.compromised_hosts) < 3:
-            # Decide whether to lateral move or exfil early based on weights
+                                                                            
             if random.random() < (weights[1] / sum(weights)):
                 pivot = random.choice(list(self.compromised_hosts))
                 next_target = random.choice(available_targets)

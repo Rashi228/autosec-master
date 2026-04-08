@@ -1,9 +1,9 @@
-"""
-war_room_rl.py — High-Fidelity RL Simulation CLI
-================================================
-A detailed CLI view of the RL agent's defensive actions, 
-showing attacker moves, logs, and agent reasoning.
-"""
+\
+\
+\
+\
+\
+   
 
 import time
 import os
@@ -38,7 +38,7 @@ def run_rl_war_room():
         print(f" ROUND {step}")
         print(f"{'-'*60}")
 
-        # --- Show Attacker Move (from the simulator state) ---
+                                                               
         sim = env.sim
         attacker_action = sim.last_attacker_action
         if attacker_action:
@@ -46,14 +46,14 @@ def run_rl_war_room():
             print(f"   Action: {attacker_action.get('attack_type'):20s} | Target: {attacker_action.get('target_host')}")
             print(f"   Reasoning: {attacker_action.get('reasoning')}")
         
-        # --- Show Recent Logs ---
+                                  
         print(f"\n📊 [LOG STREAM]")
         logs = sim.logs[-3:]
         for log in logs:
             mark = "🚨" if log.is_malicious else "🔍"
             print(f"   {mark} [{log.severity}] {log.event_type:25s} src={log.source_ip or 'internal'}")
 
-        # --- RL Agent Decision ---
+                                   
         print(f"\n🔵 [BLUE TEAM (RL) THINKING...]")
         action_multi, _ = model.predict(obs, deterministic=True)
         s_idx, t_idx, trg_idx = action_multi
@@ -62,7 +62,7 @@ def run_rl_war_room():
         print(f"   Tactic:   {TACTICS[t_idx]}")
         print(f"   Target:   {COMMON_TARGETS[trg_idx]}")
 
-        # --- Execute Step ---
+                              
         obs, reward, done, truncated, info = env.step(action_multi)
         total_reward += reward
 
