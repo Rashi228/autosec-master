@@ -15,10 +15,9 @@ import time
 from autosec_openenv.models import Action, ActionType
 from backend.rl.reward_engine import calculate_reward
 from backend.evaluator.personas import MultiPersonaEvaluator
-from backend.rl.explainability import generate_action_explanation
 from backend.curriculum.scheduler import CurriculumScheduler
 from backend.memory.vector_db import VectorMemory
-from backend.rl.env_wrapper import AutoSecGymEnv, STRATEGIES, TACTICS, COMMON_TARGETS
+from backend.rl.env_wrapper import AutoSecGymEnv
 
 try:
     from stable_baselines3 import PPO
@@ -27,9 +26,7 @@ except Exception as e:
     print(f"Warning: Could not load PPO model. Fallback active. {e}")
     _model = None
 
-import torch
 import numpy as np
-from openai import OpenAI
 
 # ─────────────────────────────────────────────────────────────────────────────
 # HYBRID BRAIN CONFIGURATION
@@ -39,9 +36,12 @@ LLM_CALL_INTERVAL = int(os.getenv("LLM_INTERVAL", "3"))
 RANDOM_SEED       = int(os.getenv("RANDOM_SEED", "42"))
 ALLOW_FALLBACK    = True
 
-client = None
-if os.getenv("OPENAI_API_KEY"):
-    client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+try:
+    from openai import OpenAI
+    client = OpenAI(api_key=os.getenv("OPENAI_API_KEY")) if os.getenv("OPENAI_API_KEY") else None
+except Exception as e:
+    print(f"Warning: OpenAI client not initialized: {e}")
+    client = None
 
 PPO_HOSTNAMES = ["web-prod-01", "db-server-01", "dc-01", "jump-host-01"]
 PPO_TACTICS   = ["INSPECT_LOGS", "BLOCK_IP", "ISOLATE_HOST", "NO_ACTION"]
@@ -124,10 +124,9 @@ def _decide_action(step, obs_obj, history):
             print(f"🤖 [BRAIN] Strategic Layer (LLM) selected: {llm_act['action_type']} on {llm_act['target']}")
             return llm_act, "LLM"
     
-    # 2. Neural Layer (PPO) - Minimal implementation for visibility
+    # 2. Neural Layer (PPO) — placeholder for visibility log
     if _model:
-        print("🧠 [BRAIN] Neural Layer (RL) inferred action.")
-        # (Simplified for server stability, uses wrapper logic)
+        print("🧠 [BRAIN] Neural Layer (RL) available but deferring to Policy.")
     
     # 3. Safety Layer (Policy)
     pol_act = _smart_policy(obs_obj, history)
@@ -282,20 +281,30 @@ async def step(payload: Dict[str, Any] = Body(default={})):
             
             # Use Hybrid Decision logic
             hist_tups = [(str(a.get("action_type")).split(".")[-1], a.get("target")) for a in sim_env.action_history]
+            if _current_pydantic_obs is None:
+                return {"error": "Environment not reset. Call /v1/reset first."}
             action_dict, source = _decide_action(sim_env.step_id + 1, _current_pydantic_obs, hist_tups)
             
             # Map the inferred action_dict back to indices for the Gym step if needed, 
             # or just execute directly on the simulation like the External Pilot does.
             
             from autosec_openenv.models import Action, ActionType
-            atype = action_dict["action_type"]
-            if isinstance(atype, str) and "." in atype: atype = atype.split(".")[-1]
+            # Normalize atype: ActionType is str+Enum, so str(atype) yields the string value directly.
+            # Handles: ActionType enum object, "ActionType.BLOCK_IP" string, or plain "BLOCK_IP" string.
+            atype_raw = action_dict["action_type"]
+            if isinstance(atype_raw, ActionType):
+                atype = atype_raw  # Already correct type
+            else:
+                atype_str = str(atype_raw)
+                if "." in atype_str:
+                    atype_str = atype_str.split(".")[-1]
+                atype = ActionType(atype_str)
             
             action_obj = Action(
-                action_type=ActionType(atype),
+                action_type=atype,
                 target=action_dict["target"],
                 strategy="DEFEND",
-                tactic=str(atype),
+                tactic="NO_ACTION",
                 reasoning=action_dict.get("reasoning", f"Autonomous {source} Action")
             )
             
