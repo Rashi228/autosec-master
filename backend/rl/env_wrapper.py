@@ -114,7 +114,7 @@ class AutoSecGymEnv(gym.Env):
         # 4. Correct Action Type Detection
         is_correct_action_type = False
         if priority >= 1: # Some threat exists
-            if a_type in [ActionType.BLOCK_IP, ActionType.ISOLATE_HOST]:
+            if a_type in [ActionType.BLOCK_IP, ActionType.ISOLATE_HOST, ActionType.TERMINATE_PROCESS]:
                 is_correct_action_type = True
         elif a_type == ActionType.MONITOR:
             is_correct_action_type = True

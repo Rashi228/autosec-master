@@ -165,16 +165,22 @@ _current_obs = None
 _current_pydantic_obs = None
 _episode_elapsed_start = 0
 
-# Lazy-loaded components to speed up startup
-_memory = None
+# Global Vector Memory (Lazy Loaded)
+_memory_db = None
 
 def get_memory():
-    global _memory
-    if _memory is None:
-        from backend.memory.vector_db import VectorMemory
-        print("Initializing Vector Memory (ChromaDB)...")
-        _memory = VectorMemory()
-    return _memory
+    global _memory_db
+    if _memory_db is None:
+        try:
+            _memory_db = VectorMemory()
+        except Exception as e:
+            print(f"⚠️ [MEMORY] Failed to initialize VectorMemory: {e}")
+            print("⚠️ [MEMORY] Continuing in memory-less mode.")
+            class MockMemory:
+                def store_experience(self, *args, **kwargs): pass
+                def retrieve_similar_actions(self, *args, **kwargs): return []
+            _memory_db = MockMemory()
+    return _memory_db
 
 
 @app.get("/health")
@@ -239,7 +245,7 @@ async def step(request: Request):
         is_ip_mismatch = payload.get("is_ip_mismatch", False)
         is_over_isolation = payload.get("is_over_isolation", False)
         
-        if client_action_data:
+        if client_action_data and client_action_data.get("action_type"):
             print("[STEP] External Pilot Action Received.")
             from autosec_openenv.models import ActionType, Action
             

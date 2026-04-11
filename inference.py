@@ -70,7 +70,12 @@ OPENAI_API_KEY     = os.getenv("OPENAI_API_KEY",      "").strip()
 # Fix global seed for reproducibility
 random.seed(RANDOM_SEED)
 
-client = OpenAI(api_key=OPENAI_API_KEY, base_url=API_BASE_URL) if OPENAI_API_KEY else None
+client = None
+if OPENAI_API_KEY:
+    try:
+        client = OpenAI(api_key=OPENAI_API_KEY, base_url=API_BASE_URL)
+    except Exception as ec:
+        logger.warning(f"Failed to initialize LLM client: {ec}")
 memory = ExperienceMemory()
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -253,6 +258,9 @@ def _try_llm_action(obs: Observation, feedback: str, history: List[Tuple[str, st
     Attempts an LLM-guided action. Returns None on any failure.
     Caller seamlessly falls back to smart policy on None return.
     """
+    if client is None:
+        return None
+
     try:
         response = client.chat.completions.create(
             model=MODEL_NAME,
@@ -611,7 +619,10 @@ def run_episode(task_id: str = "task_hard") -> Optional[dict]:
                 logger.error(f"Server error at step {step}: {step_resp['error']}")
                 break
 
-            reward_data  = step_resp.get("reward", {"value": 0.0, "feedback": ""})
+            # Handle different reward formats (OpenEnv simple float vs Dashboard rich dict)
+            reward_data = step_resp.get("pydantic_reward")
+            if not isinstance(reward_data, dict):
+                reward_data = {"value": step_resp.get("reward", 0.0), "feedback": ""}
             obs_data     = step_resp.get("observation")
             if not obs_data:
                 logger.error(f"No observation at step {step}. Response: {step_resp}")

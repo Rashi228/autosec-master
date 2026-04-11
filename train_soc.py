@@ -65,7 +65,7 @@ def train_agent(task_id: str = "task_easy", total_timesteps: int = 30000):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="AutoSec RL Training Script")
     parser.add_argument("--task", type=str, default="task_01", help="The task ID for training.")
-    parser.add_argument("--steps", type=int, default=10000, help="Total training timesteps.")
+    parser.add_argument("--steps", type=int, default=100000, help="Total training timesteps (100k recommended for production).")
     args = parser.parse_args()
     
     train_agent(task_id=args.task, total_timesteps=args.steps)

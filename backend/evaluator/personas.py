@@ -22,41 +22,51 @@ class MultiPersonaEvaluator:
         # 1. SOC Analyst: Focuses on quick triage and active threats
         analyst_score = 0.5
         analyst_reasoning = "Neutral triage assessment."
-        if action.action_type in [ActionType.BLOCK_IP, ActionType.ISOLATE_HOST]:
+        if action.action_type in [ActionType.BLOCK_IP, ActionType.ISOLATE_HOST, ActionType.TERMINATE_PROCESS]:
             if state.active_threats > 0:
-                analyst_score = 0.9
-                analyst_reasoning = "Excellent, decisive action during an active threat."
+                analyst_score = 0.95
+                analyst_reasoning = "Decisive and correct intervention during an active threat episode."
             else:
-                analyst_score = 0.2
-                analyst_reasoning = "Overly aggressive action when no clear threats are active."
+                analyst_score = 0.15
+                analyst_reasoning = "Pointless intervention; no active threats were detected in the environment."
         elif action.action_type == ActionType.MONITOR:
             if state.active_threats == 0:
-                analyst_score = 0.8
-                analyst_reasoning = "Appropriate monitoring of a stable environment."
+                analyst_score = 0.90
+                analyst_reasoning = "Vigilant monitoring of a secure environment. No intervention needed."
             else:
-                analyst_score = 0.3
-                analyst_reasoning = "Passive monitoring while threats are active."
+                analyst_score = 0.25
+                analyst_reasoning = "Passive monitoring while malicious indicators are present. Possible triage failure."
 
         # 2. Threat Hunter: Focuses on correlation and logs
         hunter_score = 0.5
         hunter_reasoning = "Standard log alignment."
         malicious_logs = [log for log in logs if log.is_malicious]
-        if action.action_type == ActionType.NO_ACTION and malicious_logs:
-            hunter_score = 0.1
-            hunter_reasoning = "Missed clear indicators of compromise in recent logs."
+        if action.action_type in [ActionType.NO_ACTION, ActionType.MONITOR] and malicious_logs:
+            hunter_score = 0.2
+            hunter_reasoning = "Significant oversight: Indicators of compromise detected in SIEM logs were ignored."
         elif action.target and any(action.target in l.raw_log for l in malicious_logs):
             hunter_score = 1.0
-            hunter_reasoning = "Target precisely correlates with observed malicious log artifacts."
+            hunter_reasoning = "High precision: The defensive target directly correlates with malicious telemetry."
+        elif action.action_type == ActionType.MONITOR and not malicious_logs:
+            hunter_score = 0.95
+            hunter_reasoning = "Correct deduction: No malicious patterns detected in the current window."
             
         # 3. Incident Responder: Focuses on containment effectiveness & blast radius
         responder_score = 0.5
-        responder_reasoning = "Containment impact is standard."
+        responder_reasoning = "Standard containment posture."
         if action.action_type == ActionType.ISOLATE_HOST and action.target == "dc-01":
-            responder_score = 0.1
-            responder_reasoning = "CRITICAL: Never indiscriminately isolate a Domain Controller without absolute certainty."
-        elif action.action_type in [ActionType.BLOCK_IP, ActionType.TERMINATE_PROCESS]:
-            responder_score = 0.9
-            responder_reasoning = "Targeted disruption limits the blast radius effectively."
+            responder_score = 0.05
+            responder_reasoning = "CRITICAL RISK: Indiscriminate isolation of the Domain Controller. High business impact."
+        elif action.action_type in [ActionType.BLOCK_IP, ActionType.TERMINATE_PROCESS, ActionType.ISOLATE_HOST]:
+            if state.active_threats > 0:
+                responder_score = 0.95
+                responder_reasoning = "Surgical containment successfully minimized the incident blast radius."
+            else:
+                responder_score = 0.4
+                responder_reasoning = "Unnecessary containment action in a stable system."
+        elif action.action_type == ActionType.MONITOR and state.active_threats == 0:
+            responder_score = 0.95
+            responder_reasoning = "Optimal posture: maintaining system availability in the absence of verified threats."
 
         # Compute Weights
         final_score = (analyst_score * 0.3) + (hunter_score * 0.3) + (responder_score * 0.4)
