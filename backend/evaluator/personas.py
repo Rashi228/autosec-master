@@ -14,11 +14,18 @@ class MultiPersonaEvaluator:
     def __init__(self):
         pass
 
-    def evaluate_action(self, action: Action, state: SystemState, logs: List[SecurityLog]) -> Dict[str, Any]:
+    def evaluate_action(self, action: Action, state: SystemState, logs: List[SecurityLog], action_history: List[Action] = None) -> Dict[str, Any]:
         """
         Calculates scores (0.0 to 1.0) and generates explanations for each persona.
         """
-        
+        action_history = action_history or []
+        recent_defensive_action = False
+        # Context: Check if a containment action was taken in the last 3 steps
+        for past_action in action_history[-3:]:
+            if past_action.action_type in [ActionType.BLOCK_IP, ActionType.ISOLATE_HOST, ActionType.TERMINATE_PROCESS]:
+                recent_defensive_action = True
+                break
+
         # 1. SOC Analyst: Focuses on quick triage and active threats
         analyst_score = 0.5
         analyst_reasoning = "Neutral triage assessment."
@@ -33,6 +40,9 @@ class MultiPersonaEvaluator:
             if state.active_threats == 0:
                 analyst_score = 0.90
                 analyst_reasoning = "Vigilant monitoring of a secure environment. No intervention needed."
+            elif recent_defensive_action:
+                analyst_score = 0.85
+                analyst_reasoning = "Strategic patience: Monitoring for telemetry after recent intervention."
             else:
                 analyst_score = 0.25
                 analyst_reasoning = "Passive monitoring while malicious indicators are present. Possible triage failure."
@@ -50,6 +60,9 @@ class MultiPersonaEvaluator:
         elif action.action_type == ActionType.MONITOR and not malicious_logs:
             hunter_score = 0.95
             hunter_reasoning = "Correct deduction: No malicious patterns detected in the current window."
+        elif action.action_type == ActionType.MONITOR and recent_defensive_action:
+            hunter_score = 0.80
+            hunter_reasoning = "Adaptive monitoring: Waiting for log decay after defensive block."
             
         # 3. Incident Responder: Focuses on containment effectiveness & blast radius
         responder_score = 0.5

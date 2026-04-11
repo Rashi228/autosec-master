@@ -400,7 +400,7 @@ async def step(request: Request):
         
         # 3. Calling Persona Evaluator for rich feedback
         print("[STEP] Calling Persona Evaluator...")
-        persona_feedback = _evaluator.evaluate_action(action_obj, sim_env.state_obj, sim_env.logs)
+        persona_feedback = _evaluator.evaluate_action(action_obj, sim_env.state_obj, sim_env.logs, action_history=sim_env.action_history)
         
         # 4. Contextual Memory
         print("[STEP] Storing in Vector Memory...")
@@ -445,6 +445,18 @@ async def step(request: Request):
         # Finalize reward as float for strict validation compatibility
         reward_val = float(reward_out.get("value", 0.0)) if isinstance(reward_out, dict) else float(reward_out)
 
+        # Calculate Running Grader Score (for real-time UI)
+        grader_res = sim_env.grader.get_episode_result(
+            final_state_obj=sim_env.state_obj,
+            total_steps=sim_env.step_id,
+            cumulative_reward=sim_env.cumulative_score,
+            threats_resolved=sim_env.threats_resolved,
+            threats_total=max(1, sim_env.threats_total),
+            errors=sim_env.errors,
+            action_history=sim_env.action_history,
+            logs=sim_env.logs
+        )
+
         # Return comprehensive response for maximum compatibility
         response_data = {
             "observation": pydantic_obs.model_dump(mode="json"),
@@ -454,8 +466,10 @@ async def step(request: Request):
             "info": {
                 "difficulty": str(_scheduler.current_difficulty.value),
                 "explanation": "Adaptive RL policy step complete.",
-                "attack_stage": get_stage_index(detect_stage(pydantic_obs.logs)),
-                "cumulative_intelligence": round(_scheduler.get_average_intelligence(), 4)
+                "attack_stage": sim_env.highest_stage_reached,
+                "cumulative_intelligence": round(_scheduler.get_average_intelligence(), 4),
+                "running_grader_score": round(grader_res.final_grader_score * 100, 1),
+                "grader_summary": grader_res.summary
             }
         }
         # Unroll observation to root level for multi-standard compatibility

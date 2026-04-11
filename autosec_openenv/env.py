@@ -57,6 +57,8 @@ class SimulationEnvironment:
         self.last_attacker_action: Optional[Dict[str, Any]] = None
         self.cumulative_score = 0.0
         self.threat_capacity = 3
+        self.attacker_phase = 0 # 0: Recon, 1: Access, 2: Lateral, 3: Exfil
+        self.highest_stage_reached = 1 # 1-5 UI mapping
         
         # Metrics for Grader
         self.threats_resolved = 0
@@ -77,6 +79,8 @@ class SimulationEnvironment:
         self.action_history = []
         self.last_attacker_action = None
         self.cumulative_score = 0.0
+        self.attacker_phase = 0
+        self.highest_stage_reached = 1
         
         # Initial Benign Activity
         self._generate_benign_logs(count=3)
@@ -107,6 +111,13 @@ class SimulationEnvironment:
         # 3. Attacker's Turn (if not done)
         if not self.done:
             self._execute_attacker_turn()
+            
+            # Update UI stage indicator based on current logs
+            from autosec_openenv.kill_chain import detect_stage, get_stage_index
+            current_stage = detect_stage(self.logs)
+            stage_idx = get_stage_index(current_stage)
+            if stage_idx > self.highest_stage_reached:
+                self.highest_stage_reached = stage_idx
             
         # 4. Process Task-Specific Side Effects
         self._process_side_effects()
@@ -197,14 +208,27 @@ class SimulationEnvironment:
         if self.state_obj.active_threats < self.threat_capacity:
             target_host = random.choice(self.hosts)
             if target_host not in self.state_obj.isolated_hosts:
-                # Task-specific attack logic
+                # Sequential Kill Chain progression
                 if self.task_id == "task_easy":
+                    self.attacker_phase = max(1, self.attacker_phase)
                     attack_type = "BRUTE_FORCE"
                 elif self.task_id == "task_medium":
-                    attack_type = "LATERAL_MOVEMENT" if self.step_id > 2 else "BRUTE_FORCE"
+                    self.attacker_phase = max(1, self.attacker_phase)
+                    attack_type = "LATERAL_MOVEMENT" if self.attacker_phase >= 2 else "BRUTE_FORCE"
                 else: # task_hard
-                    attack_type = random.choice(["LATERAL_MOVEMENT", "EXFILTRATION", "BRUTE_FORCE"])
+                    if self.attacker_phase == 0:
+                        attack_type = random.choice(["PORT_SCAN", "FAILED_LOGIN"])
+                    elif self.attacker_phase == 1:
+                        attack_type = random.choice(["BRUTE_FORCE", "SUCCESSFUL_LOGIN"])
+                    elif self.attacker_phase == 2:
+                        attack_type = "LATERAL_MOVEMENT"
+                    else:
+                        attack_type = "DATA_EXFILTRATION"
                 
+                # Probabilistic phase advancement
+                if random.random() > 0.4:
+                    self.attacker_phase = min(3, self.attacker_phase + 1)
+
                 self.last_attacker_action = {
                     "attack_type": attack_type,
                     "target_host": target_host,

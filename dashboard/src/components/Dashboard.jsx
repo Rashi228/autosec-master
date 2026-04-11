@@ -377,8 +377,22 @@ const Dashboard = () => {
                 <Cpu className="w-4 h-4 text-brand" />
               </div>
               <div>
-                <h2 className="text-sm font-bold text-slate-800 tracking-tight">AI Decision Engine</h2>
+              <div className="flex-1">
+                <h2 className="text-sm font-bold text-slate-800 tracking-tight transition-all">AI Decision Engine</h2>
                 <p className="text-[10px] text-slate-400 font-medium mt-0.5">Real-time Policy Inference</p>
+              </div>
+              <div className="ml-auto flex items-center gap-4 py-1 px-3 bg-slate-50 border border-soc-border rounded-md">
+                <div className="text-right">
+                  <p className="text-[8px] text-slate-400 font-bold uppercase tracking-widest leading-none mb-1">Judge Score</p>
+                  <p className="text-base font-bold text-brand leading-none">
+                    {state?.info?.running_grader_score ?? 0}%
+                  </p>
+                </div>
+                <div className="w-px h-6 bg-soc-border" />
+                <div className="flex flex-col items-center">
+                   <p className="text-[8px] text-slate-400 font-bold uppercase tracking-widest leading-none mb-1">Status</p>
+                   <div className={`w-2 h-2 rounded-full animate-pulse ${state?.info?.running_grader_score > 70 ? 'bg-green-500' : 'bg-amber-500'}`} />
+                </div>
               </div>
             </div>
 
@@ -441,6 +455,11 @@ const Dashboard = () => {
                     <p className="text-slate-500 leading-relaxed italic text-[11px]">
                       "{lastAction.reasoning}"
                     </p>
+                    {state?.info?.grader_summary && (
+                      <div className="mt-2 p-2 bg-brand/5 border-l-2 border-brand text-[10px] text-brand font-medium">
+                        <p className="leading-tight">⭐ JUDGE: {state.info.grader_summary}</p>
+                      </div>
+                    )}
                     {lastAction.persona_evaluations && (
                       <div className="pt-3 border-t border-soc-border space-y-3">
                         {['analyst', 'hunter', 'responder'].map(p => (
