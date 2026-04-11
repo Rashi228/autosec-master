@@ -375,28 +375,52 @@ const Dashboard = () => {
           <div className="bg-white border border-soc-border rounded-md shadow-sm p-7 flex flex-col h-full min-h-[560px]">
 
             {/* Panel header */}
-            <div className="flex items-center gap-3 mb-7 pb-5 border-b border-soc-border">
+            <div className="flex items-center gap-3 mb-7">
               <div className="p-2 bg-blue-50 border border-blue-100 rounded-md">
                 <Cpu className="w-4 h-4 text-brand" />
               </div>
               <div className="flex-1">
-                <h2 className="text-sm font-bold text-slate-800 tracking-tight transition-all">AI Decision Engine</h2>
-                <p className="text-[10px] text-slate-400 font-medium mt-0.5">Real-time Policy Inference</p>
+                <h2 className="text-sm font-bold text-slate-800 tracking-tight">AI Decision Engine</h2>
+                <p className="text-[10px] text-slate-400 font-medium">Real-time Policy Inference</p>
               </div>
-              <div className="ml-auto flex items-center gap-4 py-1 px-3 bg-slate-50 border border-soc-border rounded-md">
+              
+              <div className="ml-auto flex items-center gap-4 py-1.5 px-4 bg-slate-50 border border-soc-border rounded-md shadow-sm">
                 <div className="text-right">
-                  <p className="text-[8px] text-slate-400 font-bold uppercase tracking-widest leading-none mb-1">Judge Score</p>
-                  <p className="text-base font-bold text-brand leading-none">
+                  <p className="text-[8px] text-slate-400 font-bold uppercase tracking-widest leading-none mb-1">Score</p>
+                  <p className="text-lg font-black text-brand leading-none">
                     {state?.running_grader_score ?? state?.info?.running_grader_score ?? 0}%
                   </p>
                 </div>
                 <div className="w-px h-6 bg-soc-border" />
                 <div className="flex flex-col items-center">
                    <p className="text-[8px] text-slate-400 font-bold uppercase tracking-widest leading-none mb-1">Status</p>
-                   <div className={`w-2 h-2 rounded-full animate-pulse ${(state?.running_grader_score ?? state?.info?.running_grader_score) > 70 ? 'bg-green-500' : 'bg-amber-500'}`} />
+                   <div className={`w-2.5 h-2.5 rounded-full animate-pulse ${(state?.running_grader_score ?? state?.info?.running_grader_score ?? 0) > 70 ? 'bg-green-500' : 'bg-amber-500'}`} />
                 </div>
               </div>
             </div>
+
+            {/* UNMISSABLE JUDGE ASSESSMENT CARD */}
+            {(state?.grader_summary || state?.info?.grader_summary) ? (
+              <div className="mb-6 p-5 bg-gradient-to-br from-brand to-blue-700 text-white rounded-md shadow-lg border border-brand/20 animate-in slide-in-from-top-2 duration-500">
+                <div className="flex items-center justify-between mb-3 border-b border-white/20 pb-2">
+                  <p className="text-[10px] font-black uppercase tracking-[0.2em]">🏁 Performance Assessment</p>
+                  <span className="text-xs font-bold bg-white/20 px-2 py-0.5 rounded">AUTO-GRADER</span>
+                </div>
+                <div className="flex items-baseline gap-2 mb-4">
+                  <span className="text-3xl font-black">⭐ {(state?.running_grader_score ?? state?.info?.running_grader_score ?? 0)}</span>
+                  <span className="text-sm font-bold opacity-80 uppercase tracking-widest">% ACCURACY</span>
+                </div>
+                <div className="bg-black/15 p-3 rounded border border-white/10">
+                   <p className="text-[11px] font-medium leading-relaxed font-mono italic">
+                      "📋 {state?.grader_summary || state?.info?.grader_summary}"
+                   </p>
+                </div>
+              </div>
+            ) : (
+              <div className="mb-6 p-4 bg-slate-50 border border-dashed border-slate-200 rounded-md text-center">
+                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Awaiting Initial Assessment...</p>
+              </div>
+            )}
 
             {/* HIGH-VISIBILITY JUDGE SUMMARY (Requested Format) */}
             {(state?.grader_summary || state?.info?.grader_summary) && (

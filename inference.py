@@ -425,10 +425,14 @@ def _try_ppo_action(obs: Observation, history: List[Tuple[str, str]]) -> Optiona
                 logger.info(f"🛡️ [PPO_ADJUST] Corrected ISOLATE_HOST on IP {target} to BLOCK_IP.")
                 a_type = ActionType.BLOCK_IP
                 tactic = "BLOCK_IP"
+                is_adjustment = True
             elif a_type == ActionType.BLOCK_IP and not is_ip and target != "none" and target != "attacker_ip":
                 logger.info(f"🛡️ [PPO_ADJUST] Corrected BLOCK_IP on host {target} to ISOLATE_HOST.")
                 a_type = ActionType.ISOLATE_HOST
                 tactic = "ISOLATE_HOST"
+                is_adjustment = True
+            else:
+                is_adjustment = False
                 
             # Redundancy Check
             act_tup = (a_type.value.split(".")[-1], target)
@@ -442,6 +446,7 @@ def _try_ppo_action(obs: Observation, history: List[Tuple[str, str]]) -> Optiona
                 target=target,
                 reasoning=f"Neural Brain Strategy: Reflexive {tactic} on {target} (Pattern Match)."
             ).model_dump()
+            action_dict["is_adjustment"] = is_adjustment
             break
             
         if not action_dict:

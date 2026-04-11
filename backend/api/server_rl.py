@@ -68,21 +68,22 @@ def _smart_policy(obs_obj, history):
     from autosec_openenv.models import ActionType, Action
     malicious_logs = [l for l in obs_obj.logs if l.is_malicious]
     
-    # 1. Block malicious IPs (Highest Priority)
+    # 1. Isolate compromised hosts (Priority 1 for Safety)
+    # If a host has malicious activity, isolate it before just blocking the recurring IP.
+    for log in malicious_logs:
+        if log.hostname and log.hostname != "none":
+            act_tup = ("ISOLATE_HOST", str(log.hostname))
+            if act_tup not in history:
+                return Action(action_type=ActionType.ISOLATE_HOST, target=log.hostname,
+                            reasoning=f"Policy Safety: neutralizing compromised host {log.hostname}")
+
+    # 2. Block malicious IPs
     for log in malicious_logs:
         if log.source_ip and log.source_ip != "none":
             act_tup = ("BLOCK_IP", str(log.source_ip))
             if act_tup not in history:
                 return Action(action_type=ActionType.BLOCK_IP, target=log.source_ip, 
                             reasoning=f"Policy: neutralizing malicious traffic from {log.source_ip}")
-    
-    # 2. Isolate compromised hosts
-    for log in malicious_logs:
-        if log.hostname and log.hostname != "none":
-            act_tup = ("ISOLATE_HOST", str(log.hostname))
-            if act_tup not in history:
-                return Action(action_type=ActionType.ISOLATE_HOST, target=log.hostname,
-                            reasoning=f"Policy: emergency isolation of {log.hostname} due to malicious activity")
     
     return Action(action_type=ActionType.MONITOR, target="none", reasoning="Policy: No clear threat detected, continuing monitoring.")
 
@@ -135,7 +136,11 @@ def _decide_action(step, obs_obj, history):
             ppo_act = inference._try_ppo_action(obs_obj, history)
             if ppo_act:
                 confidence = ppo_act.get("confidence", 1.0)
-                if confidence > 0.40:
+                is_adj = ppo_act.get("is_adjustment", False)
+                # Lower threshold to 0.05 if it's a corrective adjustment
+                threshold = 0.05 if is_adj else 0.40
+                
+                if confidence > threshold:
                     print(f"🧠 [BRAIN] Neural Layer (PPO) selected: {ppo_act['action_type']} on {ppo_act['target']} (Conf: {confidence:.2f})")
                     return ppo_act, "PPO"
                 else:

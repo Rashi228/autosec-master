@@ -1,0 +1,10 @@
+node_modules
+dist
+.git
+.env
+*.pyc
+__pycache__
+dashboard/node_modules
+dashboard/dist
+*.zip
+.DS_Store
