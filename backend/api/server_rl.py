@@ -20,6 +20,7 @@ from backend.memory.vector_db import VectorMemory
 from backend.rl.env_wrapper import AutoSecGymEnv
 from fastapi import Request
 import json
+from autosec_openenv.kill_chain import detect_stage, get_stage_index
 
 try:
     from stable_baselines3 import PPO
@@ -222,6 +223,11 @@ async def reset(request: Request):
     }
     # Add root-level observation fields too
     response_data.update(pydantic_obs.model_dump(mode="json"))
+    
+    # Tactical Stage Sync
+    current_stage = detect_stage(pydantic_obs.logs)
+    response_data["info"]["attack_stage"] = get_stage_index(current_stage)
+    
     return response_data
 
 @app.post("/v1/step")
@@ -411,6 +417,7 @@ async def step(request: Request):
         # Record history for frontend
         p_scores = [p["score"] for p in persona_feedback["personas"].values() if "score" in p]
         confidence = sum(p_scores) / len(p_scores) if p_scores else 0.5
+        _scheduler.record_intelligence_score(float(confidence))
         
         action_dict = action_obj.model_dump()
         action_dict.update({
@@ -446,7 +453,9 @@ async def step(request: Request):
             "done": bool(done),
             "info": {
                 "difficulty": str(_scheduler.current_difficulty.value),
-                "explanation": "Adaptive RL policy step complete."
+                "explanation": "Adaptive RL policy step complete.",
+                "attack_stage": get_stage_index(detect_stage(pydantic_obs.logs)),
+                "cumulative_intelligence": round(_scheduler.get_average_intelligence(), 4)
             }
         }
         # Unroll observation to root level for multi-standard compatibility

@@ -26,9 +26,18 @@ def calculate_reward(action: Action, state: SystemState, step_info: dict) -> flo
     elif atype not in [ActionType.NO_ACTION, ActionType.MONITOR]:
         reward -= 0.2
         
-    # 3. Action Type Accuracy
+    # 3. Action Type Accuracy & Hierarchy
     if step_info.get("is_correct_action_type"):
-        reward += 0.6
+        # Tactical Scaling: Prioritize Block/Isolate over Terminate
+        hierarchy_bonus = 0.6
+        if atype == ActionType.BLOCK_IP:
+            hierarchy_bonus = 0.8  # Strongest containment
+        elif atype == ActionType.ISOLATE_HOST:
+            hierarchy_bonus = 0.8  # Strongest containment
+        elif atype == ActionType.TERMINATE_PROCESS:
+            hierarchy_bonus = 0.4  # Cleanup, lower tactical priority
+            
+        reward += hierarchy_bonus
         
     # 4. Stability Bonus (reward keeping the system status NORMAL)
     if state.status == "NORMAL":

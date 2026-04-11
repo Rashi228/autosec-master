@@ -18,6 +18,7 @@ class CurriculumScheduler:
         self.current_difficulty = DifficultyLevel.BASIC
         self.episode_count = 0
         self.success_history = []
+        self.intelligence_history = []
         
         # Thresholds for promotion
         self.promotion_threshold = 0.85 # 85% success rate over window
@@ -29,6 +30,9 @@ class CurriculumScheduler:
         
         if len(self.success_history) > self.window_size:
             self.success_history.pop(0)
+            
+        if len(self.intelligence_history) > self.window_size:
+            self.intelligence_history.pop(0)
             
         self._evaluate_progression()
 
@@ -45,6 +49,14 @@ class CurriculumScheduler:
             elif self.current_difficulty == DifficultyLevel.INTERMEDIATE:
                 self.current_difficulty = DifficultyLevel.ADVANCED
                 self.success_history.clear()
+
+    def record_intelligence_score(self, score: float):
+        self.intelligence_history.append(score)
+
+    def get_average_intelligence(self) -> float:
+        if not self.intelligence_history:
+            return 0.5
+        return sum(self.intelligence_history) / len(self.intelligence_history)
 
     def get_environment_params(self) -> Dict[str, Any]:
         """Returns parameters that adjust the simulator's difficulty."""

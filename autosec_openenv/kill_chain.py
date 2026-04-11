@@ -19,10 +19,10 @@ class KillChainStage(str, Enum):
     CLEANUP = "cleanup"
     BENIGN = "benign"
 
-# Mapping log types to kill chain stages
 STAGE_MAPPING = {
     "PORT_SCAN": KillChainStage.RECONNAISSANCE,
     "FAILED_LOGIN": KillChainStage.RECONNAISSANCE,
+    "BRUTE_FORCE": KillChainStage.INITIAL_ACCESS,
     "SUCCESSFUL_LOGIN": KillChainStage.INITIAL_ACCESS,
     "PRIVILEGE_ESCALATION": KillChainStage.PRIVILEGE_ESCALATION,
     "LATERAL_MOVEMENT": KillChainStage.LATERAL_MOVEMENT,
@@ -66,6 +66,19 @@ def detect_stage(logs: List[SecurityLog]) -> KillChainStage:
             highest_stage = stage
             
     return highest_stage
+
+def get_stage_index(stage: KillChainStage) -> int:
+    """Returns a 1-5 index for UI bars."""
+    mapping = {
+        KillChainStage.RECONNAISSANCE: 1,
+        KillChainStage.INITIAL_ACCESS: 2,
+        KillChainStage.PRIVILEGE_ESCALATION: 3,
+        KillChainStage.LATERAL_MOVEMENT: 4,
+        KillChainStage.EXFILTRATION: 5,
+        KillChainStage.C2_COMMUNICATION: 5,
+        KillChainStage.CLEANUP: 5
+    }
+    return mapping.get(stage, 1)
 
 def get_recommended_action_category(stage: KillChainStage) -> str:
     """
