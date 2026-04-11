@@ -22,7 +22,9 @@ class MultiPersonaEvaluator:
         recent_defensive_action = False
         # Context: Check if a containment action was taken in the last 3 steps
         for past_action in action_history[-3:]:
-            if past_action.action_type in [ActionType.BLOCK_IP, ActionType.ISOLATE_HOST, ActionType.TERMINATE_PROCESS]:
+            # Handle both dict-based and object-based history
+            a_type = past_action.get("action_type") if isinstance(past_action, dict) else getattr(past_action, "action_type", None)
+            if a_type in [ActionType.BLOCK_IP, ActionType.ISOLATE_HOST, ActionType.TERMINATE_PROCESS]:
                 recent_defensive_action = True
                 break
 

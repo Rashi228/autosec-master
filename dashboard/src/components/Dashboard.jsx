@@ -379,34 +379,42 @@ const Dashboard = () => {
               <div className="p-2 bg-blue-50 border border-blue-100 rounded-md">
                 <Cpu className="w-4 h-4 text-brand" />
               </div>
-              <div className="flex-1 relative">
+              <div className="flex-1">
                 <h2 className="text-sm font-bold text-slate-800 tracking-tight transition-all">AI Decision Engine</h2>
                 <p className="text-[10px] text-slate-400 font-medium mt-0.5">Real-time Policy Inference</p>
-                
-                {/* Robust Judge Assessment Badge */}
-                {(state?.grader_summary || state?.info?.grader_summary) && (
-                  <div className="absolute top-0 right-0 py-1 px-3 bg-brand/5 border border-brand/20 rounded-full
-                    animate-in fade-in zoom-in duration-500">
-                    <p className="text-[9px] font-bold text-brand uppercase tracking-tighter whitespace-nowrap">
-                      🏁 Assessment: {state.grader_summary || state.info.grader_summary}
-                    </p>
-                  </div>
-                )}
               </div>
               <div className="ml-auto flex items-center gap-4 py-1 px-3 bg-slate-50 border border-soc-border rounded-md">
                 <div className="text-right">
                   <p className="text-[8px] text-slate-400 font-bold uppercase tracking-widest leading-none mb-1">Judge Score</p>
                   <p className="text-base font-bold text-brand leading-none">
-                    {state?.info?.running_grader_score ?? 0}%
+                    {state?.running_grader_score ?? state?.info?.running_grader_score ?? 0}%
                   </p>
                 </div>
                 <div className="w-px h-6 bg-soc-border" />
                 <div className="flex flex-col items-center">
                    <p className="text-[8px] text-slate-400 font-bold uppercase tracking-widest leading-none mb-1">Status</p>
-                   <div className={`w-2 h-2 rounded-full animate-pulse ${state?.info?.running_grader_score > 70 ? 'bg-green-500' : 'bg-amber-500'}`} />
+                   <div className={`w-2 h-2 rounded-full animate-pulse ${(state?.running_grader_score ?? state?.info?.running_grader_score) > 70 ? 'bg-green-500' : 'bg-amber-500'}`} />
                 </div>
               </div>
             </div>
+
+            {/* HIGH-VISIBILITY JUDGE SUMMARY (Requested Format) */}
+            {(state?.grader_summary || state?.info?.grader_summary) && (
+              <div className="mb-6 p-4 bg-brand border border-brand/20 rounded-md shadow-inner animate-in slide-in-from-top-4 duration-700">
+                <p className="text-[10px] font-bold text-white/90 uppercase tracking-widest mb-2 opacity-80">
+                  🏁 Real-Time Performance Assessment
+                </p>
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-xl font-black text-white tracking-tight">
+                    ⭐ {state.running_grader_score || state.info.running_grader_score || 0}%
+                  </p>
+                  <span className="px-2 py-0.5 bg-white/20 text-white rounded text-[8px] font-bold uppercase">Accuracy</span>
+                </div>
+                <p className="text-[10px] text-white/80 font-mono leading-relaxed bg-black/10 p-2 rounded">
+                   📋 {state.grader_summary || state.info.grader_summary}
+                </p>
+              </div>
+            )}
 
             {lastAction ? (
               <div className="flex flex-col gap-6 flex-1">

@@ -207,8 +207,15 @@ class SimulationEnvironment:
     def _execute_attacker_turn(self):
         """Simulates an adversarial move."""
         # Simple heuristic attacker
-        if self.state_obj.active_threats < self.threat_capacity:
-            target_host = random.choice(self.hosts)
+        # Persistence Logic: Attacker continues if there are breached hosts that are NOT isolated
+        can_attack = self.state_obj.active_threats < self.threat_capacity or any(h not in self.state_obj.isolated_hosts for h in self.breached_hosts)
+        
+        if can_attack:
+            available_breaches = [h for h in self.breached_hosts if h not in self.state_obj.isolated_hosts]
+            
+            # If internal pivot exists, prioritize it, otherwise pick random
+            target_host = random.choice(available_breaches) if (available_breaches and random.random() < 0.9) else random.choice(self.hosts)
+            
             if target_host not in self.state_obj.isolated_hosts:
                 # Sequential Kill Chain progression
                 if self.task_id == "task_easy":
