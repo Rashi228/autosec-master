@@ -51,13 +51,13 @@ const StatCard = ({ label, value, icon, sub }) => (
 /* ─────────────────────────────────────────
    ATTACK PIPELINE
 ───────────────────────────────────────── */
-const AttackPipeline = ({ currentStage }) => {
+const AttackPipeline = ({ currentStage, stageIdx }) => {
   const STAGES = ['reconnaissance', 'initial_access', 'privilege_escalation', 'lateral_movement', 'exfiltration'];
   const normalizedStage = (currentStage || 'benign').toLowerCase().replace(/\s+/g, '_');
   const isBenign   = normalizedStage === 'benign';
   
-  // Try to find index by exact match or substring for robustness
-  let currentIdx = STAGES.indexOf(normalizedStage);
+  // Use stageIdx (1-5) if provided, otherwise fallback to name matching
+  let currentIdx = (stageIdx !== undefined && stageIdx !== null) ? stageIdx - 1 : STAGES.indexOf(normalizedStage);
   if (currentIdx === -1) {
     currentIdx = STAGES.findIndex(s => normalizedStage.includes(s) || s.includes(normalizedStage));
   }
@@ -331,7 +331,10 @@ const Dashboard = () => {
                 {state?.current_stage?.toUpperCase() || 'BENIGN'}
               </span>
             </div>
-            <AttackPipeline currentStage={state?.current_stage || 'benign'} />
+            <AttackPipeline 
+               currentStage={state?.current_stage || 'benign'} 
+               stageIdx={state?.info?.attack_stage} 
+            />
           </div>
 
           {/* Network Graph */}
@@ -378,7 +381,17 @@ const Dashboard = () => {
               </div>
               <div className="flex-1">
                 <h2 className="text-sm font-bold text-slate-800 tracking-tight transition-all">AI Decision Engine</h2>
-                <p className="text-[10px] text-slate-400 font-medium mt-0.5">Real-time Policy Inference</p>
+                <div className="flex items-center gap-2 mt-0.5">
+                  <p className="text-[10px] text-slate-400 font-medium">Real-time Policy Inference</p>
+                  {state?.info?.grader_summary && (
+                    <>
+                      <span className="text-slate-300">|</span>
+                      <span className="text-[9px] font-bold text-brand uppercase tracking-tighter animate-in fade-in slide-in-from-left-2 duration-700">
+                        {state.info.grader_summary}
+                      </span>
+                    </>
+                  )}
+                </div>
               </div>
               <div className="ml-auto flex items-center gap-4 py-1 px-3 bg-slate-50 border border-soc-border rounded-md">
                 <div className="text-right">

@@ -214,6 +214,7 @@ class SimulationEnvironment:
                     attack_type = "BRUTE_FORCE"
                 elif self.task_id == "task_medium":
                     self.attacker_phase = max(1, self.attacker_phase)
+                    # If already in Access phase, push to Lateral faster in L2
                     attack_type = "LATERAL_MOVEMENT" if self.attacker_phase >= 2 else "BRUTE_FORCE"
                 else: # task_hard
                     if self.attacker_phase == 0:
@@ -225,8 +226,9 @@ class SimulationEnvironment:
                     else:
                         attack_type = "DATA_EXFILTRATION"
                 
-                # Probabilistic phase advancement
-                if random.random() > 0.4:
+                # Faster phase advancement for persistent threat simulation
+                advancement_prob = 0.4 if self.task_id == "task_easy" else 0.7
+                if random.random() < advancement_prob:
                     self.attacker_phase = min(3, self.attacker_phase + 1)
 
                 self.last_attacker_action = {

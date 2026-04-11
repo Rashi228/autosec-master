@@ -495,6 +495,18 @@ async def get_state():
         
     elapsed = int(time.time() - _episode_elapsed_start)
         
+    # Compute running grader result for the state response
+    grader_res = sim_env.grader.get_episode_result(
+        final_state_obj=sim_env.state_obj,
+        total_steps=sim_env.step_id,
+        cumulative_reward=sim_env.cumulative_score,
+        threats_resolved=sim_env.threats_resolved,
+        threats_total=max(1, sim_env.threats_total),
+        errors=sim_env.errors,
+        action_history=sim_env.action_history,
+        logs=sim_env.logs
+    )
+
     return {
         "status": "ACTIVE",
         "task_id": sim_env.task_info.task_id if hasattr(sim_env, "task_info") else "task_hard",
@@ -509,6 +521,11 @@ async def get_state():
         "rl_telemetry": {
             "episodes": _scheduler.episode_count,
             "success_rate": sum(_scheduler.success_history) / max(1, len(_scheduler.success_history))
+        },
+        "info": {
+            "attack_stage": sim_env.highest_stage_reached,
+            "running_grader_score": round(grader_res.final_grader_score * 100, 1),
+            "grader_summary": grader_res.summary
         }
     }
 
