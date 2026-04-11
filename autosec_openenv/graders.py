@@ -95,7 +95,7 @@ class SOCGrader:
 
         # 3. Build human-readable summary — uses threats_total everywhere (no NameError)
         summary = (
-            f"Task '{self.task_id}' concluded. "
+            f"Task concluded. "
             f"Score: {final_score:.2f} "
             f"(Resolved: {threats_resolved}/{threats_total}, "
             f"Errors: {errors}, Penalty: {errors * 0.02:.2f})"
