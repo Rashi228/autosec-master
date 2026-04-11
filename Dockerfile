@@ -34,6 +34,9 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir -r requirements.txt
 
+# Pre-download embedding model to prevent 429 errors at runtime
+RUN python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('sentence-transformers/all-MiniLM-L6-v2')"
+
 # Copy backend components
 COPY autosec_openenv/ ./autosec_openenv/
 COPY backend/ ./backend/
