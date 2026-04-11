@@ -399,46 +399,7 @@ const Dashboard = () => {
               </div>
             </div>
 
-            {/* UNMISSABLE JUDGE ASSESSMENT CARD */}
-            {(state?.grader_summary || state?.info?.grader_summary) ? (
-              <div className="mb-6 p-5 bg-gradient-to-br from-brand to-blue-700 text-white rounded-md shadow-lg border border-brand/20 animate-in slide-in-from-top-2 duration-500">
-                <div className="flex items-center justify-between mb-3 border-b border-white/20 pb-2">
-                  <p className="text-[10px] font-black uppercase tracking-[0.2em]">🏁 Performance Assessment</p>
-                  <span className="text-xs font-bold bg-white/20 px-2 py-0.5 rounded">AUTO-GRADER</span>
-                </div>
-                <div className="flex items-baseline gap-2 mb-4">
-                  <span className="text-3xl font-black">⭐ {(state?.running_grader_score ?? state?.info?.running_grader_score ?? 0)}</span>
-                  <span className="text-sm font-bold opacity-80 uppercase tracking-widest">% ACCURACY</span>
-                </div>
-                <div className="bg-black/15 p-3 rounded border border-white/10">
-                   <p className="text-[11px] font-medium leading-relaxed font-mono italic">
-                      "📋 {state?.grader_summary || state?.info?.grader_summary}"
-                   </p>
-                </div>
-              </div>
-            ) : (
-              <div className="mb-6 p-4 bg-slate-50 border border-dashed border-slate-200 rounded-md text-center">
-                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Awaiting Initial Assessment...</p>
-              </div>
-            )}
 
-            {/* HIGH-VISIBILITY JUDGE SUMMARY (Requested Format) */}
-            {(state?.grader_summary || state?.info?.grader_summary) && (
-              <div className="mb-6 p-4 bg-brand border border-brand/20 rounded-md shadow-inner animate-in slide-in-from-top-4 duration-700">
-                <p className="text-[10px] font-bold text-white/90 uppercase tracking-widest mb-2 opacity-80">
-                  🏁 Real-Time Performance Assessment
-                </p>
-                <div className="flex items-center justify-between mb-2">
-                  <p className="text-xl font-black text-white tracking-tight">
-                    ⭐ {state.running_grader_score || state.info.running_grader_score || 0}%
-                  </p>
-                  <span className="px-2 py-0.5 bg-white/20 text-white rounded text-[8px] font-bold uppercase">Accuracy</span>
-                </div>
-                <p className="text-[10px] text-white/80 font-mono leading-relaxed bg-black/10 p-2 rounded">
-                   📋 {state.grader_summary || state.info.grader_summary}
-                </p>
-              </div>
-            )}
 
             {lastAction ? (
               <div className="flex flex-col gap-6 flex-1">
