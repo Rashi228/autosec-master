@@ -170,6 +170,8 @@ _scheduler = CurriculumScheduler()
 _current_obs = None
 _current_pydantic_obs = None
 _episode_elapsed_start = 0
+_last_final_score = 0.0
+_last_final_summary = "Evaluator: Awaiting task completion..."
 
 # Global Vector Memory (Lazy Loaded)
 _memory_db = None
@@ -462,6 +464,12 @@ async def step(request: Request):
             logs=sim_env.logs
         )
 
+        # Handle stable Header Score persistence
+        global _last_final_score, _last_final_summary
+        if done:
+            _last_final_score = round(grader_res.final_grader_score * 100, 1)
+            _last_final_summary = grader_res.summary
+
         # Return comprehensive response for maximum compatibility
         response_data = {
             "observation": pydantic_obs.model_dump(mode="json"),
@@ -469,14 +477,15 @@ async def step(request: Request):
             "pydantic_reward": reward_out,  # Full object for dashboard
             "done": bool(done),
             "attack_stage": sim_env.highest_stage_reached,
-            "running_grader_score": round(grader_res.final_grader_score * 100, 1),
-            "grader_summary": grader_res.summary,
+            "running_grader_score": _last_final_score, # Show STABLE score
+            "grader_summary": grader_res.summary,       # Keep CURRENT summary in reasoning panel
             "info": {
                 "difficulty": str(_scheduler.current_difficulty.value),
                 "explanation": "Adaptive RL policy step complete.",
                 "attack_stage": sim_env.highest_stage_reached,
                 "cumulative_intelligence": round(_scheduler.get_average_intelligence(), 4),
-                "running_grader_score": round(grader_res.final_grader_score * 100, 1),
+                "running_grader_score": _last_final_score,
+                "grade_status": "LOCKED" if done else "IN_PROGRESS",
                 "grader_summary": grader_res.summary
             }
         }
@@ -526,7 +535,7 @@ async def get_state():
         "difficulty": _scheduler.current_difficulty,
         "current_stage": cur_stage,
         "attack_stage": sim_env.highest_stage_reached,
-        "running_grader_score": round(grader_res.final_grader_score * 100, 1),
+        "running_grader_score": _last_final_score,
         "grader_summary": grader_res.summary,
         "episode_elapsed_s": elapsed,
         "rl_telemetry": {
@@ -535,7 +544,7 @@ async def get_state():
         },
         "info": {
             "attack_stage": sim_env.highest_stage_reached,
-            "running_grader_score": round(grader_res.final_grader_score * 100, 1),
+            "running_grader_score": _last_final_score,
             "grader_summary": grader_res.summary
         }
     }

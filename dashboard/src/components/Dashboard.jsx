@@ -386,7 +386,7 @@ const Dashboard = () => {
               
               <div className="ml-auto flex items-center gap-4 py-1.5 px-4 bg-slate-50 border border-soc-border rounded-md shadow-sm">
                 <div className="text-right">
-                  <p className="text-[8px] text-slate-400 font-bold uppercase tracking-widest leading-none mb-1">Score</p>
+                  <p className="text-[8px] text-slate-400 font-bold uppercase tracking-widest leading-none mb-1">Final Task Accuracy</p>
                   <p className="text-lg font-black text-brand leading-none">
                     {state?.running_grader_score ?? state?.info?.running_grader_score ?? 0}%
                   </p>

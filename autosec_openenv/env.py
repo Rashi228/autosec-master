@@ -84,6 +84,12 @@ class SimulationEnvironment:
         self.highest_stage_reached = 1
         self.breached_hosts = []
         
+        # RESET METRICS
+        self.threats_resolved = 0
+        self.threats_total = 0
+        self.errors = 0
+        self.grader = SOCGrader(self.task_id)
+        
         # Initial Benign Activity
         self._generate_benign_logs(count=3)
         
