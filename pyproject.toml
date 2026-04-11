@@ -17,7 +17,7 @@ dependencies = [
     "fastapi>=0.115.6",
     "uvicorn[standard]>=0.34.0",
     "pydantic>=2.10.6",
-    "openai>=1.59.9",
+    "openai>=2.7.2",
     "requests>=2.32.3",
     "python-dotenv>=1.0.1",
     "numpy>=1.24.0",
@@ -28,7 +28,7 @@ dependencies = [
 ]
 
 [project.scripts]
-server = "server.app:app"
+server = "server.app:main"
 autosec-defender = "inference:main"
 
 [tool.setuptools.packages.find]
