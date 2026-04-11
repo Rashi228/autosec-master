@@ -601,15 +601,25 @@ DIST_DIR = os.path.abspath(os.path.join(BASE_DIR, "..", "..", "dashboard", "dist
 
 @app.get("/")
 async def serve_index():
-    if os.path.exists(os.path.join(DIST_DIR, "index.html")):
-        return FileResponse(os.path.join(DIST_DIR, "index.html"))
+    index_path = os.path.join(DIST_DIR, "index.html")
+    if os.path.exists(index_path):
+        return FileResponse(index_path)
     return {"error": "Dashboard build not found. Please run npm run build."}
 
-if os.path.exists(DIST_DIR):
-    print(f"✅ Serving Static Assets from: {DIST_DIR}")
-    app.mount("/", StaticFiles(directory=DIST_DIR, html=True), name="static")
+# Explicit assets mount to handle 404s on subpaths
+ASSETS_DIR = os.path.join(DIST_DIR, "assets")
+if os.path.exists(ASSETS_DIR):
+    print(f"✅ Serving Assets from: {ASSETS_DIR}")
+    # List files for debug
+    print(f"📁 Assets found: {os.listdir(ASSETS_DIR)}")
+    app.mount("/assets", StaticFiles(directory=ASSETS_DIR), name="assets")
 else:
-    print(f"❌ Static Directory NOT FOUND: {DIST_DIR}")
+    print(f"❌ Assets Directory NOT FOUND: {ASSETS_DIR}")
+
+# Global fallback for Single Page Application
+if os.path.exists(DIST_DIR):
+    print(f"✅ Serving Static Dist from: {DIST_DIR}")
+    app.mount("/", StaticFiles(directory=DIST_DIR, html=True), name="static")
 
 if __name__ == "__main__":
     import uvicorn
