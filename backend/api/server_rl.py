@@ -240,6 +240,15 @@ async def step(request: Request):
         if _env_wrapper is None:
             return {"error": "Environment not initialized"}
         
+        # 0. Autonomous Auto-Reset Guard
+        if _env_wrapper.sim.done:
+            print(f"[LOOP] Episode concluded at Step {_env_wrapper.sim.step_id}. Triggering Auto-Reset...")
+            current_task = _env_wrapper.sim.task_id
+            _env_wrapper = AutoSecGymEnv(task_id=current_task, seed=int(os.getenv("RANDOM_SEED", "42")))
+            _current_obs, info = _env_wrapper.reset()
+            _current_pydantic_obs = info["pydantic_obs"]
+            # Fall through to process the original step request on the fresh environment
+        
         # 1. Action Selection: External Pilot vs internal RL
         client_action_data = payload.get("action")
         is_ip_mismatch = payload.get("is_ip_mismatch", False)

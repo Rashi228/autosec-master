@@ -85,6 +85,9 @@ class SimulationEnvironment:
 
     def step(self, action: Action) -> tuple[Observation, Reward, bool, dict]:
         """Executes one simulation step."""
+        if self.done:
+            return self._build_observation(), Reward(value=0.0, feedback="Episode already finished."), True, {}
+
         self.step_id += 1
         self.action_history.append(action)
         
@@ -194,7 +197,14 @@ class SimulationEnvironment:
         if self.state_obj.active_threats < self.threat_capacity:
             target_host = random.choice(self.hosts)
             if target_host not in self.state_obj.isolated_hosts:
-                attack_type = "LATERAL_MOVEMENT" if self.step_id > 2 else "BRUTE_FORCE"
+                # Task-specific attack logic
+                if self.task_id == "task_easy":
+                    attack_type = "BRUTE_FORCE"
+                elif self.task_id == "task_medium":
+                    attack_type = "LATERAL_MOVEMENT" if self.step_id > 2 else "BRUTE_FORCE"
+                else: # task_hard
+                    attack_type = random.choice(["LATERAL_MOVEMENT", "EXFILTRATION", "BRUTE_FORCE"])
+                
                 self.last_attacker_action = {
                     "attack_type": attack_type,
                     "target_host": target_host,
