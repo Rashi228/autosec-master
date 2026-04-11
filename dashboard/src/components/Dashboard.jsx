@@ -333,7 +333,7 @@ const Dashboard = () => {
             </div>
             <AttackPipeline 
                currentStage={state?.current_stage || 'benign'} 
-               stageIdx={state?.info?.attack_stage} 
+               stageIdx={state?.attack_stage || state?.info?.attack_stage} 
             />
           </div>
 
@@ -379,19 +379,19 @@ const Dashboard = () => {
               <div className="p-2 bg-blue-50 border border-blue-100 rounded-md">
                 <Cpu className="w-4 h-4 text-brand" />
               </div>
-              <div className="flex-1">
+              <div className="flex-1 relative">
                 <h2 className="text-sm font-bold text-slate-800 tracking-tight transition-all">AI Decision Engine</h2>
-                <div className="flex items-center gap-2 mt-0.5">
-                  <p className="text-[10px] text-slate-400 font-medium">Real-time Policy Inference</p>
-                  {state?.info?.grader_summary && (
-                    <>
-                      <span className="text-slate-300">|</span>
-                      <span className="text-[9px] font-bold text-brand uppercase tracking-tighter animate-in fade-in slide-in-from-left-2 duration-700">
-                        {state.info.grader_summary}
-                      </span>
-                    </>
-                  )}
-                </div>
+                <p className="text-[10px] text-slate-400 font-medium mt-0.5">Real-time Policy Inference</p>
+                
+                {/* Robust Judge Assessment Badge */}
+                {(state?.grader_summary || state?.info?.grader_summary) && (
+                  <div className="absolute top-0 right-0 py-1 px-3 bg-brand/5 border border-brand/20 rounded-full
+                    animate-in fade-in zoom-in duration-500">
+                    <p className="text-[9px] font-bold text-brand uppercase tracking-tighter whitespace-nowrap">
+                      🏁 Assessment: {state.grader_summary || state.info.grader_summary}
+                    </p>
+                  </div>
+                )}
               </div>
               <div className="ml-auto flex items-center gap-4 py-1 px-3 bg-slate-50 border border-soc-border rounded-md">
                 <div className="text-right">

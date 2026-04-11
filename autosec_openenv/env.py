@@ -59,6 +59,7 @@ class SimulationEnvironment:
         self.threat_capacity = 3
         self.attacker_phase = 0 # 0: Recon, 1: Access, 2: Lateral, 3: Exfil
         self.highest_stage_reached = 1 # 1-5 UI mapping
+        self.breached_hosts: List[str] = [] # Hosts with successful Initial Access
         
         # Metrics for Grader
         self.threats_resolved = 0
@@ -81,6 +82,7 @@ class SimulationEnvironment:
         self.cumulative_score = 0.0
         self.attacker_phase = 0
         self.highest_stage_reached = 1
+        self.breached_hosts = []
         
         # Initial Benign Activity
         self._generate_benign_logs(count=3)
@@ -217,19 +219,34 @@ class SimulationEnvironment:
                     # If already in Access phase, push to Lateral faster in L2
                     attack_type = "LATERAL_MOVEMENT" if self.attacker_phase >= 2 else "BRUTE_FORCE"
                 else: # task_hard
-                    if self.attacker_phase == 0:
-                        attack_type = random.choice(["PORT_SCAN", "FAILED_LOGIN"])
-                    elif self.attacker_phase == 1:
-                        attack_type = random.choice(["BRUTE_FORCE", "SUCCESSFUL_LOGIN"])
-                    elif self.attacker_phase == 2:
-                        attack_type = "LATERAL_MOVEMENT"
+                    # Persistence Logic: If a host is breached, the attacker prioritizes it
+                    available_breaches = [h for h in self.breached_hosts if h not in self.state_obj.isolated_hosts]
+                    
+                    if available_breaches:
+                        # Persistent Internal Jump
+                        target_host = random.choice(available_breaches)
+                        self.attacker_phase = max(2, self.attacker_phase) # Force Lateral or higher
+                        attack_type = "LATERAL_MOVEMENT" if self.attacker_phase == 2 else "DATA_EXFILTRATION"
                     else:
-                        attack_type = "DATA_EXFILTRATION"
+                        # Standard Progression from outside
+                        if self.attacker_phase == 0:
+                            attack_type = random.choice(["PORT_SCAN", "FAILED_LOGIN"])
+                        elif self.attacker_phase == 1:
+                            attack_type = random.choice(["BRUTE_FORCE", "SUCCESSFUL_LOGIN"])
+                        elif self.attacker_phase == 2:
+                            attack_type = "LATERAL_MOVEMENT"
+                        else:
+                            attack_type = "DATA_EXFILTRATION"
                 
                 # Faster phase advancement for persistent threat simulation
-                advancement_prob = 0.4 if self.task_id == "task_easy" else 0.7
+                advancement_prob = 0.5 if self.task_id == "task_easy" else 0.85
                 if random.random() < advancement_prob:
                     self.attacker_phase = min(3, self.attacker_phase + 1)
+
+                # Record Compromise if successful
+                if attack_type in ["SUCCESSFUL_LOGIN", "LATERAL_MOVEMENT"]:
+                    if target_host not in self.breached_hosts:
+                        self.breached_hosts.append(target_host)
 
                 self.last_attacker_action = {
                     "attack_type": attack_type,

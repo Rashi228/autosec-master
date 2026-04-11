@@ -463,6 +463,9 @@ async def step(request: Request):
             "reward": reward_val,  # Value for validator
             "pydantic_reward": reward_out,  # Full object for dashboard
             "done": bool(done),
+            "attack_stage": sim_env.highest_stage_reached,
+            "running_grader_score": round(grader_res.final_grader_score * 100, 1),
+            "grader_summary": grader_res.summary,
             "info": {
                 "difficulty": str(_scheduler.current_difficulty.value),
                 "explanation": "Adaptive RL policy step complete.",
@@ -517,6 +520,9 @@ async def get_state():
         "threats_resolved": sim_env.threats_resolved,
         "difficulty": _scheduler.current_difficulty,
         "current_stage": cur_stage,
+        "attack_stage": sim_env.highest_stage_reached,
+        "running_grader_score": round(grader_res.final_grader_score * 100, 1),
+        "grader_summary": grader_res.summary,
         "episode_elapsed_s": elapsed,
         "rl_telemetry": {
             "episodes": _scheduler.episode_count,
