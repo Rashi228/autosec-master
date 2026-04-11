@@ -5,9 +5,10 @@ Extends the original FastAPI server with RL-specific telemetry,
 vector memory endpoints, curriculum difficulty, and explanations.
 """
 
-from fastapi import FastAPI, HTTPException, Body
+from fastapi import FastAPI, HTTPException, Body, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 from typing import Dict, Any, List
 import os
 import time
@@ -18,7 +19,6 @@ from backend.evaluator.personas import MultiPersonaEvaluator
 from backend.curriculum.scheduler import CurriculumScheduler
 from backend.memory.vector_db import VectorMemory
 from backend.rl.env_wrapper import AutoSecGymEnv
-from fastapi import Request
 import json
 from autosec_openenv.kill_chain import detect_stage, get_stage_index
 
@@ -594,10 +594,22 @@ async def get_result():
         return {"final_grader_score": None, "summary": f"Grader error: {e}", "persona_scores": {}}
 
 
-# Serve built dashboard if it exists
-# MOVED TO BOTTOM to prevent greedy mount 404s on API routes
-if os.path.exists("dashboard/dist"):
-    app.mount("/", StaticFiles(directory="dashboard/dist", html=True), name="static")
+# Absolute path serving for reliable asset loading on Hugging Face
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+# If server_rl.py is in backend/api/, we need to go up two levels to reach /app/
+DIST_DIR = os.path.abspath(os.path.join(BASE_DIR, "..", "..", "dashboard", "dist"))
+
+@app.get("/")
+async def serve_index():
+    if os.path.exists(os.path.join(DIST_DIR, "index.html")):
+        return FileResponse(os.path.join(DIST_DIR, "index.html"))
+    return {"error": "Dashboard build not found. Please run npm run build."}
+
+if os.path.exists(DIST_DIR):
+    print(f"✅ Serving Static Assets from: {DIST_DIR}")
+    app.mount("/", StaticFiles(directory=DIST_DIR, html=True), name="static")
+else:
+    print(f"❌ Static Directory NOT FOUND: {DIST_DIR}")
 
 if __name__ == "__main__":
     import uvicorn
