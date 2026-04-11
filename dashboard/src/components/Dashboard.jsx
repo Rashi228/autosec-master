@@ -376,7 +376,6 @@ const Dashboard = () => {
               <div className="p-2 bg-blue-50 border border-blue-100 rounded-md">
                 <Cpu className="w-4 h-4 text-brand" />
               </div>
-              <div>
               <div className="flex-1">
                 <h2 className="text-sm font-bold text-slate-800 tracking-tight transition-all">AI Decision Engine</h2>
                 <p className="text-[10px] text-slate-400 font-medium mt-0.5">Real-time Policy Inference</p>
